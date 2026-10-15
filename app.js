@@ -53,7 +53,7 @@ const fmtLarga = (d) =>
 const signo = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0");
 
 function mostrar(pantalla) {
-  for (const id of ["entrada", "nombre", "cuenta"]) $(id).hidden = id !== pantalla;
+  for (const id of ["cargando", "entrada", "nombre", "cuenta"]) $(id).hidden = id !== pantalla;
 }
 
 let temporizadorAviso;
@@ -121,7 +121,10 @@ $("btn-modo").onclick = () => {
   $("error-entrada").hidden = true;
 };
 
-$("btn-salir").onclick = () => signOut(auth);
+$("btn-salir").onclick = () => {
+  try { localStorage.removeItem("cundapol.yo"); } catch {}
+  signOut(auth);
+};
 
 /* ---------- quién eres ---------- */
 
@@ -302,6 +305,17 @@ onAuthStateChanged(auth, async (user) => {
     mostrar("entrada");
     return;
   }
+  // Si este dispositivo ya sabe quién eres, se entra sin esperar a la red.
+  let local = null;
+  try { local = localStorage.getItem("cundapol.yo"); } catch {}
+  if (PERSONAS.some((p) => p.id === local)) {
+    estado.yo = local;
+    entrarEnCuenta();
+    cargarPerfil(user).then((id) => {
+      if (id && id !== estado.yo && estado.user === user) { estado.yo = id; pintar(); }
+    });
+    return;
+  }
   estado.yo = await cargarPerfil(user);
   if (estado.yo) entrarEnCuenta();
   else mostrar("nombre");
@@ -310,6 +324,3 @@ onAuthStateChanged(auth, async (user) => {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch((e) => console.error(e));
 }
-
-// El navegador puede tardar en resolver la sesión: mientras tanto, la entrada.
-mostrar("entrada");

@@ -44,6 +44,9 @@ body {
 
 h1, h2, h3 { font-family: var(--serif); font-weight: 700; margin: 0; letter-spacing: -0.01em; }
 
+#cargando { display: grid; place-items: center; min-height: 100dvh; padding: 0; }
+#cargando .palotes { width: 72px; height: 72px; margin: 0; }
+
 /* ---------- Entrada ---------- */
 
 .marca { margin-bottom: 36px; }
