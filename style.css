@@ -226,14 +226,26 @@ dialog .nota { margin-bottom: 16px; }
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 12px 16px;
-  background: var(--tinta);
-  color: var(--papel);
-  border-radius: 4px;
-  font-size: 15px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, .25);
+  padding: 13px 16px 13px 18px;
+  background: var(--papel-2);
+  color: var(--tinta);
+  border: 2px solid var(--tinta);
+  border-left: 6px solid var(--marca);
+  border-radius: 3px;
+  font: 700 19px/1.2 var(--serif);
+  box-shadow: 4px 4px 0 var(--tinta);
+  animation: llega .18s ease-out;
 }
-#aviso .enlace { color: var(--papel); text-decoration-color: var(--marca); font-weight: 600; }
+#aviso .enlace {
+  font: 600 14px var(--sans);
+  color: var(--marca);
+  text-decoration-color: var(--marca);
+  white-space: nowrap;
+}
+@keyframes llega {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
 
 @media (max-width: 360px) {
   .fila .num { font-size: 46px; }

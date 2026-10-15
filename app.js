@@ -134,18 +134,27 @@ $("lista-nombres").onclick = async (ev) => {
   if (!id || !estado.user) return;
   estado.yo = id;
   try { localStorage.setItem("cundapol.yo", id); } catch {}
-  try { await setDoc(doc(db, "perfiles", estado.user.uid), { persona: id }); } catch (e) { console.error(e); }
   entrarEnCuenta();
+  try { await setDoc(doc(db, "perfiles", estado.user.uid), { persona: id }); } catch (e) { errorDatos(e); }
 };
 
 $("btn-cambiar").onclick = () => mostrar("nombre");
 
 async function cargarPerfil(user) {
+  const ref = doc(db, "perfiles", user.uid);
   try {
-    const snap = await getDoc(doc(db, "perfiles", user.uid));
-    if (snap.exists() && nombreDe(snap.data().persona)) return snap.data().persona;
+    const snap = await getDoc(ref);
+    const id = snap.exists() ? snap.data().persona : null;
+    if (PERSONAS.some((p) => p.id === id)) return id;
   } catch (e) { console.error(e); }
-  try { return localStorage.getItem("cundapol.yo"); } catch { return null; }
+  let local = null;
+  try { local = localStorage.getItem("cundapol.yo"); } catch {}
+  if (PERSONAS.some((p) => p.id === local)) {
+    // Estaba solo en este dispositivo: se sube para que valga en todos.
+    setDoc(ref, { persona: local }).catch((e) => console.error(e));
+    return local;
+  }
+  return null;
 }
 
 /* ---------- datos ---------- */
@@ -226,7 +235,7 @@ $("libreta").onclick = async (ev) => {
   setTimeout(() => bloqueados.delete(id), 700);
   try {
     const ref = await apuntar(id, hoyISO());
-    aviso(`Apuntado: ${nombreDe(id)}`, () => deleteDoc(ref));
+    aviso(`${nombreDe(id)}, +1`, () => deleteDoc(ref));
   } catch (e) { errorDatos(e); }
 };
 
@@ -256,7 +265,7 @@ $("dlg-dia").addEventListener("close", async () => {
   if (!dia) return;
   try {
     const ref = await apuntar(quien, dia);
-    aviso(`Apuntado: ${nombreDe(quien)}, ${fmtCorta(dia)}`, () => deleteDoc(ref));
+    aviso(`${nombreDe(quien)}, +1 el ${fmtCorta(dia)}`, () => deleteDoc(ref));
   } catch (e) { errorDatos(e); }
 });
 
@@ -294,7 +303,7 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
   estado.yo = await cargarPerfil(user);
-  if (estado.yo && nombreDe(estado.yo) !== estado.yo) entrarEnCuenta();
+  if (estado.yo) entrarEnCuenta();
   else mostrar("nombre");
 });
 
