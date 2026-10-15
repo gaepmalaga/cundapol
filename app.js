@@ -307,5 +307,9 @@ onAuthStateChanged(auth, async (user) => {
   else mostrar("nombre");
 });
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch((e) => console.error(e));
+}
+
 // El navegador puede tardar en resolver la sesión: mientras tanto, la entrada.
 mostrar("entrada");
