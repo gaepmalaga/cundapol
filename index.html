@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cundapol</title>
+<meta name="theme-color" content="#f1e9d6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Entrada -->
+<section id="entrada" class="pantalla" hidden>
+  <div class="marca">
+    <svg class="palotes" viewBox="0 0 64 64" aria-hidden="true"><path d="M14 10v44M26 10v44M38 10v44M50 10v44M6 46L58 18"/></svg>
+    <h1>Cundapol</h1>
+    <p class="lema">Quién ha llevado el coche.</p>
+  </div>
+
+  <button id="btn-google" class="boton-linea" type="button">Entrar con Google</button>
+  <p class="separador"><span>o con correo</span></p>
+
+  <form id="form-correo" autocomplete="on">
+    <label>Correo
+      <input id="correo" type="email" autocomplete="email" required>
+    </label>
+    <label>Contraseña
+      <input id="clave" type="password" autocomplete="current-password" minlength="6" required>
+    </label>
+    <p id="error-entrada" class="error" role="alert" hidden></p>
+    <button id="btn-correo" class="boton-solido" type="submit">Entrar</button>
+    <button id="btn-modo" class="enlace" type="button">No tengo cuenta, crear una</button>
+  </form>
+</section>
+
+<!-- Quién eres -->
+<section id="nombre" class="pantalla" hidden>
+  <h2 class="titulo-pantalla">¿Quién eres?</h2>
+  <p class="nota">Solo se pregunta esta vez. Se puede cambiar luego.</p>
+  <ul id="lista-nombres" class="nombres"></ul>
+</section>
+
+<!-- Cuenta -->
+<section id="cuenta" class="pantalla ancha" hidden>
+  <header class="cabecera">
+    <h1>Cundapol</h1>
+    <p class="quien"><span id="soy"></span> · <button id="btn-cambiar" class="enlace" type="button">cambiar</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
+  </header>
+
+  <p id="hoy" class="hoy"></p>
+
+  <ol id="libreta" class="libreta"></ol>
+  <p id="pie-total" class="pie-total"></p>
+
+  <div class="acciones">
+    <button id="btn-otro-dia" class="enlace" type="button">Apuntar otro día</button>
+    <button id="btn-ajustar" class="enlace" type="button">Ajustar cuentas</button>
+  </div>
+
+  <h2 class="subtitulo">Historial</h2>
+  <ul id="historial" class="historial"></ul>
+  <button id="btn-ver-todo" class="enlace" type="button" hidden>Ver todo</button>
+</section>
+
+<!-- Apuntar otro día -->
+<dialog id="dlg-dia">
+  <form method="dialog" id="form-dia">
+    <h3>Apuntar otro día</h3>
+    <label>Quién llevó
+      <select id="dia-quien"></select>
+    </label>
+    <label>Qué día
+      <input id="dia-fecha" type="date" required>
+    </label>
+    <div class="botones">
+      <button value="cancel" class="enlace" type="submit" formnovalidate>Cancelar</button>
+      <button value="ok" class="boton-solido" type="submit">Apuntar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Ajustar cuentas -->
+<dialog id="dlg-ajuste">
+  <form method="dialog" id="form-ajuste">
+    <h3>Ajustar cuentas</h3>
+    <p class="nota">Pon el número que lleva cada uno ahora. Quedará anotado en el historial como un ajuste.</p>
+    <div id="ajuste-campos" class="campos-ajuste"></div>
+    <div class="botones">
+      <button value="cancel" class="enlace" type="submit" formnovalidate>Cancelar</button>
+      <button value="ok" class="boton-solido" type="submit">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="aviso" role="status" aria-live="polite" hidden>
+  <span id="aviso-texto"></span>
+  <button id="aviso-deshacer" class="enlace" type="button" hidden>Deshacer</button>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

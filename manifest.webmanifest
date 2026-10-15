@@ -1,0 +1,14 @@
+{
+  "name": "Cundapol",
+  "short_name": "Cundapol",
+  "description": "Quién ha llevado el coche.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1e9d6",
+  "theme_color": "#f1e9d6",
+  "lang": "es",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

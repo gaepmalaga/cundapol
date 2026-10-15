@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Cualquiera que haya entrado puede leer, apuntar y quitar viajes.
+    // Los viajes no se editan: si algo está mal, se quita y se vuelve a apuntar.
+    match /viajes/{id} {
+      allow read, create, delete: if request.auth != null;
+      allow update: if false;
+    }
+
+    // Cada cuenta guarda solo su propio "quién soy".
+    match /perfiles/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
