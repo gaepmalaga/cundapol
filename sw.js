@@ -1,6 +1,6 @@
 // Deja abrir la app sin cobertura. Los datos de Firestore NO pasan por aquí:
 // los guarda su propia caché y se sincronizan cuando vuelve la señal.
-const CACHE = "cundapol-v1";
+const CACHE = "cundapol-v2";
 const BASICOS = ["./", "index.html", "style.css", "app.js", "icon.svg", "manifest.webmanifest"];
 
 // Solo lo nuestro y lo que se descarga como librería o tipografía.
@@ -25,7 +25,28 @@ self.addEventListener("fetch", (ev) => {
   const propio = url.origin === self.location.origin;
   if (!propio && !HOSTS_CACHEABLES.includes(url.hostname)) return;
 
-  // Se sirve lo guardado al instante y se refresca por detrás para la próxima vez.
+  // Lo propio: primero la red, para no mezclar versiones; sin red, lo guardado.
+  if (propio) {
+    ev.respondWith(
+      fetch(req, { cache: "no-cache" }) // GitHub Pages deja la caché HTTP en 10 min
+        .then((resp) => {
+          if (resp.ok) {
+            const copia = resp.clone();
+            caches.open(CACHE).then((c) => c.put(req, copia));
+          }
+          return resp;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE);
+          return (await cache.match(req, { ignoreSearch: true }))
+            ?? (req.mode === "navigate" ? await cache.match("index.html") : undefined)
+            ?? Response.error();
+        }),
+    );
+    return;
+  }
+
+  // Librerías y tipografías: lo guardado al instante y se refresca por detrás.
   ev.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const guardado = await cache.match(req, { ignoreSearch: propio });
