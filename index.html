@@ -47,18 +47,49 @@
   </form>
 </section>
 
-<!-- Quién eres -->
+<!-- Cómo te llamas -->
 <section id="nombre" class="pantalla" hidden>
-  <h2 class="titulo-pantalla">¿Quién eres?</h2>
-  <p class="nota">Solo se pregunta esta vez. Se puede cambiar luego.</p>
-  <ul id="lista-nombres" class="nombres"></ul>
+  <h2 class="titulo-pantalla">¿Cómo te llamas?</h2>
+  <p class="nota">Así te verán los de tus cundas.</p>
+  <form id="form-nombre">
+    <label>Nombre
+      <input id="mi-nombre" type="text" autocomplete="given-name" maxlength="40" required>
+    </label>
+    <button class="boton-solido" type="submit">Seguir</button>
+  </form>
+</section>
+
+<!-- Tus cundas -->
+<section id="cundas" class="pantalla" hidden>
+  <h2 class="titulo-pantalla">Tus cundas</h2>
+  <p id="sin-cundas" class="nota" hidden>Todavía no estás en ninguna. Crea una o pide el enlace a quien la lleve.</p>
+  <ul id="lista-cundas" class="nombres"></ul>
+
+  <button id="btn-migrar" class="boton-linea migrar" type="button" hidden>Pasar la cunda de siempre al sistema nuevo</button>
+
+  <form id="form-crear" class="crear">
+    <label>Crear una cunda nueva
+      <input id="crear-nombre" type="text" maxlength="40" placeholder="La del trabajo" required>
+    </label>
+    <button class="boton-solido" type="submit">Crear</button>
+  </form>
+
+  <p class="quien pie-cundas"><span id="soy-cundas"></span> · <button id="btn-renombrar" class="enlace" type="button">cambiar nombre</button> · <button id="btn-salir-2" class="enlace" type="button">salir</button></p>
+</section>
+
+<!-- Al unirse a una cunda con gente sin cuenta -->
+<section id="elegir" class="pantalla" hidden>
+  <h2 class="titulo-pantalla">¿Eres alguno de estos?</h2>
+  <p class="nota">En <strong id="elegir-cunda"></strong> hay gente apuntada que aún no tiene cuenta. Si eres uno, sus viajes pasan a ser los tuyos.</p>
+  <ul id="lista-libres" class="nombres"></ul>
+  <button id="btn-soy-nuevo" class="enlace soy-nuevo" type="button"></button>
 </section>
 
 <!-- Cuenta -->
 <section id="cuenta" class="pantalla ancha" hidden>
   <header class="cabecera">
-    <h1>Cundapol</h1>
-    <p class="quien"><span id="soy"></span> · <button id="btn-cambiar" class="enlace" type="button">cambiar</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
+    <h1 id="cunda-nombre">Cundapol</h1>
+    <p class="quien"><span id="soy"></span> · <button id="btn-invitar" class="enlace" type="button">invitar</button> · <button id="btn-cambiar" class="enlace" type="button">cundas</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
   </header>
 
   <p id="hoy" class="hoy"></p>
@@ -102,6 +133,20 @@
     <div class="botones">
       <button value="cancel" class="enlace" type="submit" formnovalidate>Cancelar</button>
       <button value="ok" class="boton-solido" type="submit">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Invitar -->
+<dialog id="dlg-invitar">
+  <form method="dialog">
+    <h3>Invitar a la cunda</h3>
+    <p class="nota">Manda este enlace a quien quieras que entre. Tendrá que entrar con su cuenta.</p>
+    <input id="invitar-enlace" type="text" readonly>
+    <button id="btn-compartir" class="boton-solido compartir" type="button">Compartir enlace</button>
+    <button id="btn-enlace-nuevo" class="enlace" type="button" hidden>Hacer un enlace nuevo (el anterior deja de valer)</button>
+    <div class="botones">
+      <button value="cancel" class="enlace" type="submit">Cerrar</button>
     </div>
   </form>
 </dialog>

@@ -2,17 +2,82 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Cualquiera que haya entrado puede leer, apuntar y quitar viajes.
-    // Los viajes no se editan: si algo está mal, se quita y se vuelve a apuntar.
-    match /viajes/{id} {
-      allow read, create, delete: if request.auth != null;
-      allow update: if false;
+    function entrado() { return request.auth != null; }
+    function cunda(cid) { return get(/databases/$(database)/documents/cundas/$(cid)).data; }
+    function esMiembro(cid) { return entrado() && request.auth.uid in cunda(cid).uids; }
+    function esAdmin(cid) { return entrado() && cunda(cid).admin == request.auth.uid; }
+    function nombreValido(n) { return n is string && n.size() > 0 && n.size() <= 40; }
+    function cambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
+
+    // Una cunda: quién está (uids), quién la lleva (admin) y el código del enlace de invitación.
+    match /cundas/{cid} {
+      allow read: if entrado() && request.auth.uid in resource.data.uids;
+
+      // Quien la crea es su admin y, de entrada, el único dentro.
+      // "original" es la cunda de antes del multiusuario: nace ya con los suyos dentro.
+      allow create: if entrado()
+        && request.resource.data.admin == request.auth.uid
+        && request.auth.uid in request.resource.data.uids
+        && (cid == "original" || request.resource.data.uids == [request.auth.uid])
+        && nombreValido(request.resource.data.nombre)
+        && request.resource.data.codigo is string && request.resource.data.codigo.size() >= 12;
+
+      allow update: if
+        // El admin cambia lo que quiera menos quién es el admin.
+        (entrado() && resource.data.admin == request.auth.uid
+          && request.resource.data.admin == resource.data.admin
+          && nombreValido(request.resource.data.nombre))
+        // Unirse con el enlace: solo se añade uno mismo y hay que traer el código bueno.
+        || (entrado()
+          && cambia(["uids", "invitacion"])
+          && request.resource.data.invitacion == resource.data.codigo
+          && request.resource.data.uids.toSet() == resource.data.uids.toSet().union([request.auth.uid].toSet()));
+
+      allow delete: if false;
+
+      // Las personas de la cunda. Cada una con su cuenta (uid); solo las que venían
+      // de antes pueden estar sin cuenta (uid nulo) hasta que alguien diga "soy yo".
+      match /miembros/{pid} {
+        allow read: if esMiembro(cid);
+        allow create: if esAdmin(cid)
+          || (esMiembro(cid)
+            && pid == request.auth.uid
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.keys().hasOnly(["nombre", "uid"])
+            && nombreValido(request.resource.data.nombre));
+        allow update: if esAdmin(cid)
+          || (esMiembro(cid) && resource.data.uid == null
+            && request.resource.data.uid == request.auth.uid && cambia(["uid"]))
+          || (entrado() && resource.data.uid == request.auth.uid
+            && cambia(["nombre"]) && nombreValido(request.resource.data.nombre));
+        allow delete: if esAdmin(cid);
+      }
+
+      // Los viajes no se editan: si algo está mal, se quita y se vuelve a apuntar.
+      // Quita quien lo apuntó o el admin.
+      match /viajes/{id} {
+        allow read: if esMiembro(cid);
+        allow create: if esMiembro(cid)
+          && (request.resource.data.por == request.auth.uid || esAdmin(cid))
+          && existsAfter(/databases/$(database)/documents/cundas/$(cid)/miembros/$(request.resource.data.persona))
+          && request.resource.data.tipo in ["viaje", "ajuste"]
+          && request.resource.data.n is int
+          && request.resource.data.dia is string;
+        allow update: if false;
+        allow delete: if esMiembro(cid) && (resource.data.por == request.auth.uid || esAdmin(cid));
+      }
     }
 
-    // Cada cuenta guarda solo su propio "quién soy".
+    // Cada cuenta guarda solo su propio perfil (nombre).
     match /perfiles/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if entrado();
+      allow write: if entrado() && request.auth.uid == uid;
+    }
+
+    // Lo de antes del multiusuario: queda solo para leerlo y pasarlo a la cunda "original".
+    match /viajes/{id} {
+      allow read: if entrado();
+      allow write: if false;
     }
   }
 }
