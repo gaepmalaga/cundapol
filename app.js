@@ -8,6 +8,7 @@ import {
   collection, doc, addDoc, deleteDoc, getDoc, getDocs, setDoc, updateDoc, onSnapshot,
   query, where, arrayUnion, arrayRemove, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { VERSION } from "./version.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBTC7Im2qfaZodfhH1Qr_Uey4CGEyVw0Yc",
@@ -729,21 +730,29 @@ window.addEventListener("hashchange", () => {
   if (estado.user && estado.perfil.nombre && location.hash.startsWith("#unirse=")) continuar();
 });
 
-// Actualizarse sola: al volver a la app se busca versión nueva y, si la hay, se recarga
-// (sin cortar a nadie con un diálogo abierto). Cada versión nueva cambia el CACHE de sw.js.
+/* ---------- versión ---------- */
+
+// Se enseña la versión que está funcionando y, si hay otra publicada, un aviso para actualizar.
+for (const el of document.querySelectorAll(".version")) el.textContent = `Versión ${VERSION}`;
+
+async function buscarVersionNueva() {
+  try {
+    const texto = await (await fetch(`version.js?v=${Date.now()}`, { cache: "no-store" })).text();
+    const publicada = Number(texto.match(/VERSION\s*=\s*(\d+)/)?.[1]);
+    if (publicada > VERSION) {
+      $("nueva-version-texto").textContent = `Hay una versión nueva (${publicada}).`;
+      $("nueva-version").hidden = false;
+    }
+  } catch {} // sin red no se sabe; ya se mirará
+}
+$("btn-actualizar").onclick = () => location.reload();
+
+buscarVersionNueva();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") buscarVersionNueva();
+});
+setInterval(() => document.visibilityState === "visible" && buscarVersionNueva(), 30 * 60 * 1000);
+
 if ("serviceWorker" in navigator) {
-  const habiaVersion = !!navigator.serviceWorker.controller;
-  let pendiente = false;
-  const recargar = () => {
-    if (document.querySelector("dialog[open]")) return (pendiente = true);
-    location.reload();
-  };
-  navigator.serviceWorker.addEventListener("controllerchange", () => { if (habiaVersion) recargar(); });
-  navigator.serviceWorker.register("sw.js").then((reg) => {
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "visible") return;
-      if (pendiente) return recargar();
-      reg.update().catch(() => {});
-    });
-  }).catch((e) => console.error(e));
+  navigator.serviceWorker.register("sw.js").catch((e) => console.error(e));
 }
