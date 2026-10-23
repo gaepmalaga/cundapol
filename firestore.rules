@@ -27,10 +27,17 @@ service cloud.firestore {
         && request.resource.data.codigo is string && request.resource.data.codigo.size() >= 12;
 
       allow update: if
-        // El admin cambia lo que quiera menos quién es el admin.
+        // El admin cambia lo que quiera (nombre, gente, enlace) y puede pasar la cunda a
+        // otro de dentro; la cunda nunca se queda con un admin que no esté en ella.
         (entrado() && resource.data.admin == request.auth.uid
-          && request.resource.data.admin == resource.data.admin
+          && (request.resource.data.admin == resource.data.admin || request.resource.data.admin in resource.data.uids)
+          && request.resource.data.admin in request.resource.data.uids
           && nombreValido(request.resource.data.nombre))
+        // Salirse: solo se quita uno mismo, y el admin no (antes tiene que pasarla).
+        || (entrado() && request.auth.uid in resource.data.uids
+          && resource.data.admin != request.auth.uid
+          && cambia(["uids"])
+          && request.resource.data.uids.toSet() == resource.data.uids.toSet().difference([request.auth.uid].toSet()))
         // En la "original", cualquiera apunta hasta dónde se ha copiado de la colección vieja.
         || (cid == "original" && entrado() && request.auth.uid in resource.data.uids
           && cambia(["sincronizado"]) && request.resource.data.sincronizado is timestamp)
@@ -60,7 +67,10 @@ service cloud.firestore {
           || (esMiembro(cid) && resource.data.uid == null
             && request.resource.data.uid == request.auth.uid && cambia(["uid"]))
           || (entrado() && resource.data.uid == request.auth.uid
-            && cambia(["nombre"]) && nombreValido(request.resource.data.nombre));
+            && cambia(["nombre"]) && nombreValido(request.resource.data.nombre))
+          // Al salir o al volver con el enlace, cada uno se marca fuera o dentro.
+          || (esMiembro(cid) && resource.data.uid == request.auth.uid
+            && cambia(["fuera"]) && request.resource.data.fuera is bool);
         allow delete: if esAdmin(cid);
       }
 
@@ -71,7 +81,8 @@ service cloud.firestore {
         let viejo = get(/databases/$(database)/documents/viajes/$(id)).data;
         let nuevo = request.resource.data;
         return viejo.persona == nuevo.persona && viejo.dia == nuevo.dia && viejo.n == nuevo.n
-          && viejo.tipo == nuevo.tipo && viejo.por == nuevo.por;
+          && viejo.tipo == nuevo.tipo && viejo.por == nuevo.por
+          && viejo.por in cunda(cid).uids;
       }
 
       match /viajes/{id} {

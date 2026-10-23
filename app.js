@@ -6,7 +6,7 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, addDoc, deleteDoc, getDoc, getDocs, setDoc, updateDoc, onSnapshot,
-  query, where, arrayUnion, writeBatch, serverTimestamp,
+  query, where, arrayUnion, arrayRemove, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -38,7 +38,7 @@ const estado = {
   user: null, perfil: { nombre: null, legado: null },
   cundas: [], cundasListas: false,
   cid: null, cunda: null, miembros: [], miembrosListos: false, viajes: [],
-  verTodo: false, modoAlta: false, autoAbrir: false, esperandoOriginal: false,
+  verTodo: false, modoAlta: false, autoAbrir: false, esperandoOriginal: false, saliendo: false,
 };
 let dejarDeEscucharCundas = null;
 let dejarDeEscucharCunda = [];
@@ -94,7 +94,9 @@ function aviso(texto, deshacer) {
 
 function errorDatos(e) {
   console.error(e);
-  aviso(e?.code === "permission-denied" ? "Sin permiso para hacer eso." : "No se ha podido guardar.");
+  aviso(e?.code === "permission-denied"
+    ? "Sin permiso. Si no es cosa del admin, cierra la app del todo y ábrela otra vez para actualizarla."
+    : "No se ha podido guardar.");
 }
 
 /* ---------- entrada ---------- */
@@ -334,7 +336,8 @@ async function sincronizarOriginal() {
     const copias = [];
     for (const d of viejos.docs) {
       const v = d.data();
-      if (!v.creado || !LEGADO.some((p) => p.id === v.persona)) continue;
+      const cunda = estado.cunda ?? (await getDoc(ref)).data();
+      if (!v.creado || !LEGADO.some((p) => p.id === v.persona) || !cunda?.uids?.includes(v.por)) continue;
       if (!hasta || v.creado.toMillis() > hasta.toMillis()) hasta = v.creado;
       if (!ya.has(d.id)) copias.push(setDoc(doc(ref, "viajes", d.id), v));
     }
@@ -367,6 +370,8 @@ const yo = () => (estado.miembros.find((m) => m.uid === estado.user?.uid)
   ?? (estado.cid === ORIGINAL && estado.perfil.legado ? estado.miembros.find((m) => m.legado === estado.perfil.legado) : null))?.id ?? null;
 const soyAdmin = () => estado.cunda?.admin === estado.user?.uid;
 const nombreDe = (id) => estado.miembros.find((m) => m.id === id)?.nombre ?? "?";
+// Quien sale o echan queda "fuera": su historial se ve, pero ya no cuenta para la media.
+const activos = () => estado.miembros.filter((m) => !m.fuera);
 
 function dejarCunda() {
   for (const f of dejarDeEscucharCunda) f();
@@ -384,6 +389,8 @@ function abrirCunda(cid) {
     // Ya no estás o no existe: de vuelta a la lista.
     console.error(e);
     if (estado.cid !== cid) return;
+    if (estado.saliendo) return;
+    if (estado.cunda?.nombre && e?.code === "permission-denied") aviso(`Ya no estás en «${estado.cunda.nombre}»`);
     dejarCunda();
     guardar("cundapol.cunda", null);
     estado.cid = null;
@@ -401,6 +408,9 @@ function abrirCunda(cid) {
       estado.miembros = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(porNombre);
       estado.miembrosListos ||= !snap.metadata.fromCache;
       if (estado.miembrosListos && !yo()) return sinSitio();
+      // Volviste con el enlace después de salir: se te vuelve a contar.
+      const mio = estado.miembros.find((m) => m.id === yo());
+      if (mio?.fuera && mio.uid === estado.user.uid && !estado.saliendo) updateDoc(doc(ref, "miembros", mio.id), { fuera: false }).catch(console.error);
       if (enPantalla("elegir") && yo()) mostrar("cuenta");
       pintar();
     }, fuera),
@@ -448,7 +458,7 @@ const apuntar = (persona, dia, n = 1, tipo = "viaje") =>
 /* ---------- pintado ---------- */
 
 function totales() {
-  const t = Object.fromEntries(estado.miembros.map((m) => [m.id, 0]));
+  const t = Object.fromEntries(activos().map((m) => [m.id, 0]));
   for (const v of estado.viajes) if (v.persona in t) t[v.persona] += v.n;
   return t;
 }
@@ -462,9 +472,10 @@ function pintar() {
 
   const t = totales();
   const suma = Object.values(t).reduce((a, b) => a + b, 0);
-  const media = estado.miembros.length ? suma / estado.miembros.length : 0;
+  const gente = activos();
+  const media = gente.length ? suma / gente.length : 0;
 
-  $("libreta").innerHTML = estado.miembros.map((p) => {
+  $("libreta").innerHTML = gente.map((p) => {
     const d = Math.round(t[p.id] - media);
     const texto = d === 0 ? "en la media" : d > 0 ? `${d} por encima de la media` : `${Math.abs(d)} por debajo de la media`;
     const nombre = esc(p.nombre);
@@ -488,6 +499,7 @@ function pintar() {
       }).join("")
     : `<li class="vacio">Todavía no hay nada apuntado.</li>`;
   $("btn-ver-todo").hidden = estado.verTodo || orden.length <= 12;
+  if ($("dlg-gente").open) pintarGente();
 }
 
 /* ---------- acciones ---------- */
@@ -518,7 +530,7 @@ $("btn-ver-todo").onclick = () => { estado.verTodo = true; pintar(); };
 
 /* otro día */
 $("btn-otro-dia").onclick = () => {
-  $("dia-quien").innerHTML = estado.miembros.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join("");
+  $("dia-quien").innerHTML = activos().map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)}</option>`).join("");
   $("dia-quien").value = yo() ?? "";
   $("dia-fecha").value = hoyISO();
   $("dia-fecha").max = hoyISO();
@@ -538,7 +550,7 @@ $("dlg-dia").addEventListener("close", async () => {
 /* ajustar cuentas */
 $("btn-ajustar").onclick = () => {
   const t = totales();
-  $("ajuste-campos").innerHTML = estado.miembros
+  $("ajuste-campos").innerHTML = activos()
     .map((p) => `<label>${esc(p.nombre)}<input type="number" inputmode="numeric" step="1" data-id="${esc(p.id)}" value="${t[p.id]}" required></label>`)
     .join("");
   $("dlg-ajuste").showModal();
@@ -555,6 +567,81 @@ $("dlg-ajuste").addEventListener("close", async () => {
     aviso("Cuentas ajustadas", () => Promise.all(refs.map((r) => deleteDoc(r))));
   } catch (e) { errorDatos(e); }
 });
+
+/* gente de la cunda */
+function abrirGente() {
+  pintarGente();
+  $("dlg-gente").showModal();
+}
+$("btn-gente").onclick = abrirGente;
+
+function pintarGente() {
+  const admin = soyAdmin();
+  const mio = yo();
+  $("gente-admin").hidden = !admin;
+  if (admin && document.activeElement !== $("gente-nombre")) $("gente-nombre").value = estado.cunda?.nombre ?? "";
+  $("gente-lista").innerHTML = activos().map((m) => {
+    const etiqueta = m.uid && m.uid === estado.cunda?.admin ? "la lleva" : !m.uid ? "sin cuenta" : m.id === mio ? "tú" : "";
+    const botones = admin && m.id !== mio
+      ? `${m.uid ? `<button class="enlace" type="button" data-accion="admin" data-id="${esc(m.id)}">pasarle la cunda</button>` : ""}
+         <button class="enlace" type="button" data-accion="echar" data-id="${esc(m.id)}">echar</button>`
+      : "";
+    return `<li><span class="nom">${esc(m.nombre)}${etiqueta ? `<span class="dif">${etiqueta}</span>` : ""}</span><span class="acciones-gente">${botones}</span></li>`;
+  }).join("");
+  $("btn-salir-cunda").hidden = admin;
+  $("gente-nota").textContent = admin
+    ? "Para salirte, pásale antes la cunda a otra persona."
+    : "Si sales, tus viajes se quedan en el historial pero dejas de contar. Puedes volver con el enlace.";
+}
+
+$("btn-gente-nombre").onclick = async () => {
+  const nombre = $("gente-nombre").value.trim().slice(0, 40);
+  if (!nombre || nombre === estado.cunda?.nombre) return;
+  try { await updateDoc(doc(db, "cundas", estado.cid), { nombre }); aviso("Nombre cambiado"); } catch (e) { errorDatos(e); }
+};
+
+$("gente-lista").onclick = async (ev) => {
+  const btn = ev.target.closest("button[data-accion]");
+  const m = estado.miembros.find((x) => x.id === btn?.dataset.id);
+  if (!m) return;
+  const ref = doc(db, "cundas", estado.cid);
+  try {
+    if (btn.dataset.accion === "admin") {
+      if (!confirm(`${m.nombre} llevará la cunda y tú pasarás a ser uno más. ¿Seguimos?`)) return;
+      await updateDoc(ref, { admin: m.uid });
+      aviso(`Ahora la lleva ${m.nombre}`);
+    } else {
+      if (!confirm(`¿Echar a ${m.nombre}? Sus viajes se quedan en el historial pero deja de contar. El enlace de invitación cambia para que no pueda volver con el viejo.`)) return;
+      const lote = writeBatch(db);
+      lote.update(doc(ref, "miembros", m.id), { fuera: true });
+      lote.update(ref, m.uid ? { uids: arrayRemove(m.uid), codigo: nuevoCodigo() } : { codigo: nuevoCodigo() });
+      await lote.commit();
+      aviso(`${m.nombre} ya no está en la cunda`);
+    }
+    pintarGente();
+  } catch (e) { errorDatos(e); }
+};
+
+$("btn-salir-cunda").onclick = async () => {
+  const nombre = estado.cunda?.nombre ?? "esta cunda";
+  if (!confirm(`¿Salir de «${nombre}»? Tus viajes se quedan en el historial. Para volver necesitarás el enlace.`)) return;
+  const ref = doc(db, "cundas", estado.cid);
+  const mio = yo();
+  try {
+    const lote = writeBatch(db);
+    if (mio) lote.update(doc(ref, "miembros", mio), { fuera: true });
+    lote.update(ref, { uids: arrayRemove(estado.user.uid) });
+    estado.saliendo = true; // ni reactivarse ni avisar como si te hubieran echado
+    await lote.commit();
+    $("dlg-gente").close();
+    dejarCunda();
+    guardar("cundapol.cunda", null);
+    estado.cid = null;
+    mostrar("cundas");
+    pintarCundas();
+    aviso(`Has salido de «${nombre}»`);
+  } catch (e) { errorDatos(e); } finally { estado.saliendo = false; }
+};
 
 /* invitar */
 function abrirInvitar() {
@@ -642,6 +729,21 @@ window.addEventListener("hashchange", () => {
   if (estado.user && estado.perfil.nombre && location.hash.startsWith("#unirse=")) continuar();
 });
 
+// Actualizarse sola: al volver a la app se busca versión nueva y, si la hay, se recarga
+// (sin cortar a nadie con un diálogo abierto). Cada versión nueva cambia el CACHE de sw.js.
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js").catch((e) => console.error(e));
+  const habiaVersion = !!navigator.serviceWorker.controller;
+  let pendiente = false;
+  const recargar = () => {
+    if (document.querySelector("dialog[open]")) return (pendiente = true);
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (habiaVersion) recargar(); });
+  navigator.serviceWorker.register("sw.js").then((reg) => {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      if (pendiente) return recargar();
+      reg.update().catch(() => {});
+    });
+  }).catch((e) => console.error(e));
 }
