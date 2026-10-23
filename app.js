@@ -94,7 +94,9 @@ function aviso(texto, deshacer) {
 
 function errorDatos(e) {
   console.error(e);
-  aviso(e?.code === "permission-denied" ? "Sin permiso para hacer eso." : "No se ha podido guardar.");
+  aviso(e?.code === "permission-denied"
+    ? "Sin permiso. Si no es cosa del admin, cierra la app del todo y ábrela otra vez para actualizarla."
+    : "No se ha podido guardar.");
 }
 
 /* ---------- entrada ---------- */
@@ -727,6 +729,21 @@ window.addEventListener("hashchange", () => {
   if (estado.user && estado.perfil.nombre && location.hash.startsWith("#unirse=")) continuar();
 });
 
+// Actualizarse sola: al volver a la app se busca versión nueva y, si la hay, se recarga
+// (sin cortar a nadie con un diálogo abierto). Cada versión nueva cambia el CACHE de sw.js.
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js").catch((e) => console.error(e));
+  const habiaVersion = !!navigator.serviceWorker.controller;
+  let pendiente = false;
+  const recargar = () => {
+    if (document.querySelector("dialog[open]")) return (pendiente = true);
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (habiaVersion) recargar(); });
+  navigator.serviceWorker.register("sw.js").then((reg) => {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      if (pendiente) return recargar();
+      reg.update().catch(() => {});
+    });
+  }).catch((e) => console.error(e));
 }
