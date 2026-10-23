@@ -259,3 +259,13 @@ dialog .nota { margin-bottom: 16px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ---------- Cundas ---------- */
+
+.nombres .admin { display: block; font: 400 13.5px var(--sans); color: var(--tenue); margin-top: 4px; }
+.crear { margin-top: 30px; }
+.pie-cundas { margin-top: 30px; }
+.soy-nuevo { margin-top: 18px; }
+.compartir { margin-top: 12px; }
+#btn-enlace-nuevo { margin-top: 10px; font-size: 14px; color: var(--tenue); }
+#invitar-enlace { font-size: 14px; }

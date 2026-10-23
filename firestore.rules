@@ -2,17 +2,103 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Cualquiera que haya entrado puede leer, apuntar y quitar viajes.
-    // Los viajes no se editan: si algo está mal, se quita y se vuelve a apuntar.
-    match /viajes/{id} {
-      allow read, create, delete: if request.auth != null;
-      allow update: if false;
+    function entrado() { return request.auth != null; }
+    function cunda(cid) { return get(/databases/$(database)/documents/cundas/$(cid)).data; }
+    function esMiembro(cid) { return entrado() && request.auth.uid in cunda(cid).uids; }
+    function esAdmin(cid) { return entrado() && cunda(cid).admin == request.auth.uid; }
+    function nombreValido(n) { return n is string && n.size() > 0 && n.size() <= 40; }
+    function cambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
+    function personaDe(uid) { return get(/databases/$(database)/documents/perfiles/$(uid)).data.get("persona", null); }
+    function esDeSiempre() { return entrado() && personaDe(request.auth.uid) in ["silvia", "maria", "curro", "christian"]; }
+
+    // Una cunda: quién está (uids), quién la lleva (admin) y el código del enlace de invitación.
+    match /cundas/{cid} {
+      allow read: if entrado() && request.auth.uid in resource.data.uids;
+
+      // Quien la crea es su admin y, de entrada, el único dentro.
+      // "original" es la cunda de antes del multiusuario: la crea cualquiera de los cuatro,
+      // nace ya con los suyos dentro y la lleva Christian.
+      allow create: if entrado()
+        && request.auth.uid in request.resource.data.uids
+        && (cid == "original"
+          ? esDeSiempre() && personaDe(request.resource.data.admin) == "christian"
+          : request.resource.data.admin == request.auth.uid && request.resource.data.uids == [request.auth.uid])
+        && nombreValido(request.resource.data.nombre)
+        && request.resource.data.codigo is string && request.resource.data.codigo.size() >= 12;
+
+      allow update: if
+        // El admin cambia lo que quiera menos quién es el admin.
+        (entrado() && resource.data.admin == request.auth.uid
+          && request.resource.data.admin == resource.data.admin
+          && nombreValido(request.resource.data.nombre))
+        // En la "original", cualquiera apunta hasta dónde se ha copiado de la colección vieja.
+        || (cid == "original" && entrado() && request.auth.uid in resource.data.uids
+          && cambia(["sincronizado"]) && request.resource.data.sincronizado is timestamp)
+        // Unirse con el enlace: solo se añade uno mismo y hay que traer el código bueno.
+        || (entrado()
+          && cambia(["uids", "invitacion"])
+          && request.resource.data.invitacion == resource.data.codigo
+          && request.resource.data.uids.toSet() == resource.data.uids.toSet().union([request.auth.uid].toSet()));
+
+      allow delete: if false;
+
+      // Las personas de la cunda. Cada una con su cuenta (uid); solo las que venían
+      // de antes pueden estar sin cuenta (uid nulo) hasta que alguien diga "soy yo".
+      match /miembros/{pid} {
+        allow read: if esMiembro(cid);
+        allow create: if esAdmin(cid)
+          // Los de la "original" nacen en el mismo lote que ella.
+          || (cid == "original" && entrado()
+            && !exists(/databases/$(database)/documents/cundas/$(cid))
+            && request.auth.uid in getAfter(/databases/$(database)/documents/cundas/$(cid)).data.uids)
+          || (esMiembro(cid)
+            && pid == request.auth.uid
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.keys().hasOnly(["nombre", "uid"])
+            && nombreValido(request.resource.data.nombre));
+        allow update: if esAdmin(cid)
+          || (esMiembro(cid) && resource.data.uid == null
+            && request.resource.data.uid == request.auth.uid && cambia(["uid"]))
+          || (entrado() && resource.data.uid == request.auth.uid
+            && cambia(["nombre"]) && nombreValido(request.resource.data.nombre));
+        allow delete: if esAdmin(cid);
+      }
+
+      // Los viajes no se editan: si algo está mal, se quita y se vuelve a apuntar.
+      // Quita quien lo apuntó o el admin.
+      // En la "original" cualquiera de dentro copia un viaje de la colección vieja, tal cual.
+      function copiaFiel(id) {
+        let viejo = get(/databases/$(database)/documents/viajes/$(id)).data;
+        let nuevo = request.resource.data;
+        return viejo.persona == nuevo.persona && viejo.dia == nuevo.dia && viejo.n == nuevo.n
+          && viejo.tipo == nuevo.tipo && viejo.por == nuevo.por;
+      }
+
+      match /viajes/{id} {
+        allow read: if esMiembro(cid);
+        allow create: if esMiembro(cid)
+          && (request.resource.data.por == request.auth.uid || esAdmin(cid)
+            || (cid == "original" && exists(/databases/$(database)/documents/viajes/$(id)) && copiaFiel(id)))
+          && existsAfter(/databases/$(database)/documents/cundas/$(cid)/miembros/$(request.resource.data.persona))
+          && request.resource.data.tipo in ["viaje", "ajuste"]
+          && request.resource.data.n is int
+          && request.resource.data.dia is string;
+        allow update: if false;
+        allow delete: if esMiembro(cid) && (resource.data.por == request.auth.uid || esAdmin(cid));
+      }
     }
 
-    // Cada cuenta guarda solo su propio "quién soy".
+    // Cada cuenta guarda solo su propio perfil (nombre).
     match /perfiles/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if entrado();
+      allow write: if entrado() && request.auth.uid == uid;
+    }
+
+    // Lo de antes del multiusuario. Sigue abierto como antes mientras alguien tenga la app vieja;
+    // lo que se apunte aquí pasa solo a la "original". Cuando todos hayan actualizado: write false.
+    match /viajes/{id} {
+      allow read, create, delete: if entrado();
+      allow update: if false;
     }
   }
 }
