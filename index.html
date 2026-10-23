@@ -87,7 +87,7 @@
 <section id="cuenta" class="pantalla ancha" hidden>
   <header class="cabecera">
     <h1 id="cunda-nombre">Cundapol</h1>
-    <p class="quien"><span id="soy"></span> · <button id="btn-invitar" class="enlace" type="button">invitar</button> · <button id="btn-cambiar" class="enlace" type="button">cundas</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
+    <p class="quien"><span id="soy"></span> · <button id="btn-invitar" class="enlace" type="button">invitar</button> · <button id="btn-gente" class="enlace" type="button">gente</button> · <button id="btn-cambiar" class="enlace" type="button">cundas</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
   </header>
 
   <p id="hoy" class="hoy"></p>
@@ -131,6 +131,25 @@
     <div class="botones">
       <button value="cancel" class="enlace" type="submit" formnovalidate>Cancelar</button>
       <button value="ok" class="boton-solido" type="submit">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Gente de la cunda -->
+<dialog id="dlg-gente">
+  <form method="dialog">
+    <h3>Gente de la cunda</h3>
+    <div id="gente-admin" class="gente-admin" hidden>
+      <label>Nombre de la cunda
+        <input id="gente-nombre" type="text" maxlength="40">
+      </label>
+      <button id="btn-gente-nombre" class="enlace" type="button">Guardar nombre</button>
+    </div>
+    <ul id="gente-lista" class="gente"></ul>
+    <p id="gente-nota" class="nota"></p>
+    <button id="btn-salir-cunda" class="enlace" type="button" hidden>Salir de esta cunda</button>
+    <div class="botones">
+      <button value="cancel" class="enlace" type="submit">Cerrar</button>
     </div>
   </form>
 </dialog>

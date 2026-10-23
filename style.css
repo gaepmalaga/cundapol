@@ -269,3 +269,13 @@ dialog .nota { margin-bottom: 16px; }
 .compartir { margin-top: 12px; }
 #btn-enlace-nuevo { margin-top: 10px; font-size: 14px; color: var(--tenue); }
 #invitar-enlace { font-size: 14px; }
+
+.gente-admin { margin-bottom: 14px; }
+.gente-admin .enlace { font-size: 14px; }
+.gente { list-style: none; margin: 0 0 12px; padding: 0; border-top: 1px solid var(--regla); }
+.gente li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--regla); }
+.gente .nom { font: 700 19px/1.15 var(--serif); }
+.gente .dif { display: block; font: 400 13px var(--sans); color: var(--tenue); margin-top: 2px; }
+.acciones-gente { display: flex; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+.acciones-gente .enlace { font-size: 13.5px; color: var(--tenue); padding: 0; }
+#btn-salir-cunda { color: var(--error); text-decoration-color: var(--error); }
