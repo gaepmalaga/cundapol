@@ -38,7 +38,7 @@ const estado = {
   user: null, perfil: { nombre: null, legado: null },
   cundas: [], cundasListas: false,
   cid: null, cunda: null, miembros: [], miembrosListos: false, viajes: [],
-  verTodo: false, modoAlta: false, autoAbrir: false,
+  verTodo: false, modoAlta: false, autoAbrir: false, esperandoOriginal: false,
 };
 let dejarDeEscucharCundas = null;
 let dejarDeEscucharCunda = [];
@@ -190,7 +190,15 @@ async function cargarPerfil(user) {
   } catch (e) { console.error(e); }
   const legado = LEGADO.find((p) => p.id === (datos.persona ?? leer("cundapol.yo")))?.id ?? null;
   const nombre = datos.nombre ?? LEGADO.find((p) => p.id === legado)?.nombre ?? null;
-  if (nombre && !datos.nombre) setDoc(doc(db, "perfiles", user.uid), { nombre }, { merge: true }).catch(console.error);
+  const falta = { ...(nombre && !datos.nombre && { nombre }), ...(legado && !datos.persona && { persona: legado }) };
+  // La persona hace falta en la nube para entrar en la "original": se espera a que se suba.
+  // Sin red no se queda colgado: a los 5 s sigue y se sube cuando vuelva.
+  if (Object.keys(falta).length) {
+    await Promise.race([
+      setDoc(doc(db, "perfiles", user.uid), falta, { merge: true }).catch(console.error),
+      new Promise((r) => setTimeout(r, 5000)),
+    ]);
+  }
   if (nombre) guardar("cundapol.nombre", nombre);
   return { nombre, legado };
 }
@@ -243,6 +251,7 @@ function escucharCundas() {
 }
 
 function pintarCundas() {
+  if (estado.esperandoOriginal && estado.cundasListas) return aLaOriginal();
   // Recién llegado y con una sola cunda (p. ej. la "original" recién pasada): se abre sola.
   if (estado.autoAbrir && estado.cundas.length === 1 && enPantalla("cundas")) {
     estado.autoAbrir = false;
@@ -254,8 +263,6 @@ function pintarCundas() {
     .map((c) => `<li><button type="button" data-id="${esc(c.id)}">${esc(c.nombre)}${
       c.admin === estado.user?.uid ? `<span class="admin">la llevas tú</span>` : ""}</button></li>`)
     .join("");
-  $("btn-migrar").hidden = !estado.perfil.legado || !estado.cundasListas
-    || estado.cundas.some((c) => c.id === ORIGINAL);
 }
 
 $("lista-cundas").onclick = (ev) => {
@@ -285,62 +292,79 @@ $("form-crear").onsubmit = async (ev) => {
   abrirInvitar();
 };
 
-// Pasa la cunda de antes (colección "viajes" suelta) a la cunda "original".
-// Entra todo el que ya tenía cuenta; quien no, queda sin cuenta hasta que diga "soy yo".
-$("btn-migrar").onclick = async () => {
-  if (!confirm("Se pasa la cunda de Silvia, María, Curro y Christian al sistema nuevo, con todo su historial, y la llevarás tú. ¿Seguimos?")) return;
-  $("btn-migrar").disabled = true;
-  estado.autoAbrir = false;
-  try {
-    await migrar();
-    abrirCunda(ORIGINAL);
-    aviso("Cunda pasada");
-  } catch (e) {
-    console.error(e);
-    aviso(e?.message === "ya-existe" ? "Ya la ha pasado otra persona. Pídele el enlace." : "No se ha podido pasar.");
-  } finally {
-    $("btn-migrar").disabled = false;
-  }
-};
-
-async function migrar() {
-  const uid = estado.user.uid;
-  const uidDe = { [estado.perfil.legado]: uid };
+// La cunda de antes (colección "viajes" suelta) pasa sola a la cunda "original" la primera vez
+// que entra cualquiera de los cuatro, con Christian de admin. Cada persona sigue con su id de
+// siempre ("silvia", "maria"…) y su cuenta; quien aún no tenga cuenta la reclama al entrar.
+async function crearOriginal() {
+  const uidsDe = {};
   for (const d of (await getDocs(collection(db, "perfiles"))).docs) {
     const p = d.data().persona;
-    if (LEGADO.some((x) => x.id === p)) uidDe[p] ??= d.id;
+    if (LEGADO.some((x) => x.id === p)) (uidsDe[p] ??= []).push(d.id);
   }
-  const pid = (p) => uidDe[p] ?? p;
+  (uidsDe[estado.perfil.legado] ??= []).includes(estado.user.uid) || uidsDe[estado.perfil.legado].push(estado.user.uid);
+  const admin = uidsDe.christian?.includes(estado.user.uid) ? estado.user.uid : uidsDe.christian?.[0];
+  if (!admin) throw new Error("sin-christian");
+
   const ref = doc(db, "cundas", ORIGINAL);
+  const lote = writeBatch(db);
+  lote.set(ref, {
+    nombre: "Cundapol", admin, uids: [...new Set(Object.values(uidsDe).flat())],
+    codigo: nuevoCodigo(), creado: serverTimestamp(),
+  });
+  for (const p of LEGADO) {
+    const suya = uidsDe[p.id]?.includes(estado.user.uid) ? estado.user.uid : uidsDe[p.id]?.[0];
+    lote.set(doc(ref, "miembros", p.id), { nombre: p.nombre, uid: suya ?? null, legado: p.id });
+  }
+  await lote.commit();
+}
 
+// Copia a la "original" lo apuntado en la colección vieja que aún no esté (la primera vez, todo;
+// luego, lo que se apunte desde una versión vieja de la app mientras la gente actualiza).
+let sincronizando = false;
+async function sincronizarOriginal() {
+  if (sincronizando || !estado.perfil.legado || estado.cid !== ORIGINAL) return;
+  sincronizando = true;
   try {
-    await setDoc(ref, {
-      nombre: "Cundapol", admin: uid, uids: [...new Set(Object.values(uidDe))],
-      codigo: nuevoCodigo(), creado: serverTimestamp(),
-    });
-  } catch (e) {
-    // Si se quedó a medias por un corte, quien la creó puede terminarla.
-    const snap = await getDoc(ref).catch(() => null);
-    if (snap?.data()?.admin !== uid) throw new Error("ya-existe");
-  }
+    const ref = doc(db, "cundas", ORIGINAL);
+    const desde = (await getDoc(ref)).data()?.sincronizado ?? null;
+    const viejos = await getDocs(desde ? query(collection(db, "viajes"), where("creado", ">", desde)) : collection(db, "viajes"));
+    if (viejos.empty) return;
+    const ya = new Set((await getDocs(collection(ref, "viajes"))).docs.map((d) => d.id));
+    let hasta = desde;
+    const copias = [];
+    for (const d of viejos.docs) {
+      const v = d.data();
+      if (!v.creado || !LEGADO.some((p) => p.id === v.persona)) continue;
+      if (!hasta || v.creado.toMillis() > hasta.toMillis()) hasta = v.creado;
+      if (!ya.has(d.id)) copias.push(setDoc(doc(ref, "viajes", d.id), v));
+    }
+    const fallos = (await Promise.allSettled(copias)).filter((r) => r.status === "rejected");
+    if (fallos.length) return console.error("sincronizar", fallos[0].reason);
+    if (hasta !== desde) await updateDoc(ref, { sincronizado: hasta });
+  } catch (e) { console.error(e); } finally { sincronizando = false; }
+}
 
-  const ya = new Set((await getDocs(collection(ref, "viajes"))).docs.map((d) => d.id));
-  const escrituras = LEGADO.map((p) => [doc(ref, "miembros", pid(p.id)), { nombre: p.nombre, uid: uidDe[p.id] ?? null }]);
-  for (const d of (await getDocs(collection(db, "viajes"))).docs) {
-    const v = d.data();
-    if (ya.has(d.id) || !LEGADO.some((p) => p.id === v.persona)) continue;
-    escrituras.push([doc(ref, "viajes", d.id), { ...v, persona: pid(v.persona) }]);
+// Uno de los cuatro sin cunda abierta: a la "original", creándola si hace falta.
+async function aLaOriginal() {
+  estado.esperandoOriginal = false;
+  if (!estado.cundas.some((c) => c.id === ORIGINAL)) {
+    try { await crearOriginal(); } catch (e) {
+      console.error(e);
+      if (e?.message === "sin-christian") {
+        mostrar("cundas");
+        pintarCundas();
+        return aviso("Christian tiene que abrir la app primero.");
+      }
+      // Otro la ha creado a la vez: se abre igual.
+    }
   }
-  for (let i = 0; i < escrituras.length; i += 400) {
-    const lote = writeBatch(db);
-    for (const [r, datos] of escrituras.slice(i, i + 400)) lote.set(r, datos);
-    await lote.commit();
-  }
+  abrirCunda(ORIGINAL);
 }
 
 /* ---------- una cunda ---------- */
 
-const yo = () => estado.miembros.find((m) => m.uid === estado.user?.uid)?.id ?? null;
+const yo = () => (estado.miembros.find((m) => m.uid === estado.user?.uid)
+  ?? (estado.cid === ORIGINAL && estado.perfil.legado ? estado.miembros.find((m) => m.legado === estado.perfil.legado) : null))?.id ?? null;
 const soyAdmin = () => estado.cunda?.admin === estado.user?.uid;
 const nombreDe = (id) => estado.miembros.find((m) => m.id === id)?.nombre ?? "?";
 
@@ -368,7 +392,11 @@ function abrirCunda(cid) {
   };
   const ref = doc(db, "cundas", cid);
   dejarDeEscucharCunda = [
-    onSnapshot(ref, (s) => { estado.cunda = s.exists() ? { id: s.id, ...s.data() } : null; pintar(); }, fuera),
+    onSnapshot(ref, { includeMetadataChanges: true }, (s) => {
+      estado.cunda = s.exists() ? { id: s.id, ...s.data() } : null;
+      if (cid === ORIGINAL && s.exists() && !s.metadata.fromCache) sincronizarOriginal();
+      pintar();
+    }, fuera),
     onSnapshot(collection(ref, "miembros"), { includeMetadataChanges: true }, (snap) => {
       estado.miembros = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(porNombre);
       estado.miembrosListos ||= !snap.metadata.fromCache;
@@ -566,6 +594,15 @@ function continuar() {
   if (inv) return unirse(inv);
   const ultima = leer("cundapol.cunda");
   if (ultima) return abrirCunda(ultima);
+  if (estado.perfil.legado) {
+    // Sin pasar por "Tus cundas": se espera a saber si la "original" existe ya.
+    estado.esperandoOriginal = true;
+    mostrar("cargando");
+    setTimeout(() => {
+      if (estado.esperandoOriginal) { estado.esperandoOriginal = false; mostrar("cundas"); pintarCundas(); }
+    }, 10000);
+    return pintarCundas();
+  }
   estado.autoAbrir = true;
   mostrar("cundas");
   pintarCundas();

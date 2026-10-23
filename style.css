@@ -263,7 +263,6 @@ dialog .nota { margin-bottom: 16px; }
 /* ---------- Cundas ---------- */
 
 .nombres .admin { display: block; font: 400 13.5px var(--sans); color: var(--tenue); margin-top: 4px; }
-.migrar { margin-top: 22px; }
 .crear { margin-top: 30px; }
 .pie-cundas { margin-top: 30px; }
 .soy-nuevo { margin-top: 18px; }
