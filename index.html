@@ -18,6 +18,12 @@
 </head>
 <body>
 
+<!-- Aviso de versión nueva -->
+<div id="nueva-version" class="nueva-version" role="status" hidden>
+  <span id="nueva-version-texto">Hay una versión nueva.</span>
+  <button id="btn-actualizar" class="boton-solido" type="button">Actualizar</button>
+</div>
+
 <!-- Mientras Firebase comprueba si ya hay sesión -->
 <section id="cargando" class="pantalla" aria-label="Cargando">
   <svg class="palotes" viewBox="0 0 64 64" aria-hidden="true"><path d="M14 10v44M26 10v44M38 10v44M50 10v44M6 46L58 18"/></svg>
@@ -73,6 +79,7 @@
   </form>
 
   <p class="quien pie-cundas"><span id="soy-cundas"></span> · <button id="btn-renombrar" class="enlace" type="button">cambiar nombre</button> · <button id="btn-salir-2" class="enlace" type="button">salir</button></p>
+  <p class="version"></p>
 </section>
 
 <!-- Al unirse a una cunda con gente sin cuenta -->
@@ -103,6 +110,7 @@
   <h2 class="subtitulo">Historial</h2>
   <ul id="historial" class="historial"></ul>
   <button id="btn-ver-todo" class="enlace" type="button" hidden>Ver todo</button>
+  <p class="version"></p>
 </section>
 
 <!-- Apuntar otro día -->
