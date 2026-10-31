@@ -18,11 +18,11 @@ Todo en español: interfaz, nombres de variables y funciones, comentarios y mens
 - `perfiles/{uid}`: `nombre`, y `persona` en los cuatro de siempre.
 - `viajes/{id}` (en la raíz): la colección de antes del multiusuario. Ver «Pendiente».
 
-- **Vacaciones** (aparte de Kundapol, en `vacaciones.html` + `vacaciones.js`, con su `vacaciones.webmanifest`; mismo Firebase, mismo `style.css` y mismo `sw.js`):
+- **Vacapol** (las vacaciones; aparte de Kundapol, con su logo `vacapol.svg` y PNG `vacapol-*.png`, en `vacaciones.html` + `vacaciones.js`, con su `vacaciones.webmanifest`; mismo Firebase, mismo `style.css` y mismo `sw.js`):
   - `turnos/{tid}`: `nombre`, `inicio` (AAAA-MM-DD, primer día de trabajo de una tanda), `admin` (uid), `uids`, `codigo`, `invitacion`.
     - `miembros/{uid}`: `nombre` (el de `perfiles`).
     - `dias/{uid}_{día}`: `uid`, `dia`. Cada uno apunta y quita solo los suyos (el admin también quita).
-  - Se trabajan 6 días y se libran 6 desde `inicio`; la app calcula qué días son de trabajo y solo deja marcar esos. Sin máximo de gente por día. Recuento por persona y año.
+  - Se trabajan 6 días y se libran 6 desde `inicio`; la app calcula qué días son de trabajo y solo deja marcar esos. Sin máximo de gente por día. Recuento por persona y año. Dos vistas, «Mes» (calendario con mapa de calor y detalle del día) y «Lista» (un día por línea, por tandas); la elegida se recuerda. Los días pasados se ven atenuados como historial y siguen siendo editables.
   - Mismo funcionamiento que las cundas: crea el admin, enlace `#unirse=<tid>.<codigo>`, echar, pasar el turno, salirse.
 
 ## Funcionamiento

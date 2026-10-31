@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Vacaciones</title>
+<title>Vacapol</title>
 <meta name="theme-color" content="#f1e9d6">
 <link rel="manifest" href="vacaciones.webmanifest">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="vacapol.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="vacapol-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Vacaciones">
+<meta name="apple-mobile-web-app-title" content="Vacapol">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
@@ -26,14 +26,14 @@
 
 <!-- Mientras Firebase comprueba si ya hay sesión -->
 <section id="cargando" class="pantalla" aria-label="Cargando">
-  <svg class="palotes" viewBox="0 0 64 64" aria-hidden="true"><path d="M14 10v44M26 10v44M38 10v44M50 10v44M6 46L58 18"/></svg>
+  <img class="logo" src="vacapol.svg" alt="" width="72" height="72">
 </section>
 
 <!-- Entrada -->
 <section id="entrada" class="pantalla" hidden>
   <div class="marca">
-    <svg class="palotes" viewBox="0 0 64 64" aria-hidden="true"><path d="M14 10v44M26 10v44M38 10v44M50 10v44M6 46L58 18"/></svg>
-    <h1>Vacaciones</h1>
+    <img class="logo" src="vacapol.svg" alt="" width="56" height="56">
+    <h1>Vacapol</h1>
     <p class="lema">Quién quiere librar cada día.</p>
   </div>
 
@@ -89,7 +89,7 @@
 <!-- Un turno -->
 <section id="cuenta" class="pantalla ancha" hidden>
   <header class="cabecera">
-    <h1 id="turno-nombre">Vacaciones</h1>
+    <h1 id="turno-nombre">Vacapol</h1>
     <p class="quien"><span id="soy"></span> · <button id="btn-invitar" class="enlace" type="button">invitar</button> · <button id="btn-gente" class="enlace" type="button">gente</button> · <button id="btn-cambiar" class="enlace" type="button">turnos</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
   </header>
 
@@ -98,9 +98,24 @@
     <h2 id="mes-titulo"></h2>
     <button id="mes-sig" class="mes-flecha" type="button" aria-label="Mes siguiente">›</button>
   </nav>
-  <p class="nota nota-mes">Toca ✓ en los días que quieras librar. Solo salen los días de trabajo.</p>
 
-  <ol id="dias" class="dias"></ol>
+  <div class="vistas" role="group" aria-label="Forma de verlo">
+    <button type="button" data-vista="mes" aria-pressed="true">Mes</button>
+    <button type="button" data-vista="lista" aria-pressed="false">Lista</button>
+  </div>
+
+  <div id="vista-mes">
+    <div class="sem" aria-hidden="true"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+    <div id="rejilla" class="rej"></div>
+    <div id="detalle" class="det"></div>
+    <div class="leyenda" aria-hidden="true"><span>Pocos</span><i class="l1"></i><i class="l2"></i><i class="l3"></i><span id="leyenda-max">Muchos</span></div>
+    <p class="nota nota-mes">Gris: días de descanso. El punto marca los tuyos. Los días ya pasados quedan de historial.</p>
+  </div>
+
+  <div id="vista-lista" hidden>
+    <div id="dias"></div>
+    <p class="nota nota-mes">Toca una línea para pedir ese día. Solo salen los días de trabajo.</p>
+  </div>
 
   <h2 class="subtitulo">Recuento <span id="rec-anio"></span></h2>
   <ul id="recuento" class="recuento"></ul>
