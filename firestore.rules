@@ -99,6 +99,71 @@ service cloud.firestore {
       }
     }
 
+    // Vacaciones (vacaciones.html): un turno de trabajo con su gente, su enlace de invitación
+    // y los días que cada uno quiere librar. Aparte de las cundas.
+    function turno(tid) { return get(/databases/$(database)/documents/turnos/$(tid)).data; }
+    function esDelTurno(tid) { return entrado() && request.auth.uid in turno(tid).uids; }
+    function esAdminTurno(tid) { return entrado() && turno(tid).admin == request.auth.uid; }
+    function fechaValida(f) { return f is string && f.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"); }
+
+    match /turnos/{tid} {
+      allow read: if entrado() && request.auth.uid in resource.data.uids;
+
+      allow create: if entrado()
+        && request.resource.data.admin == request.auth.uid
+        && request.resource.data.uids == [request.auth.uid]
+        && nombreValido(request.resource.data.nombre)
+        && fechaValida(request.resource.data.inicio)
+        && request.resource.data.codigo is string && request.resource.data.codigo.size() >= 12;
+
+      allow update:
+        // El admin cambia lo que quiera (nombre, arranque, gente, enlace) y puede pasar el turno
+        // a otro de dentro; el turno nunca se queda con un admin que no esté en él.
+        if (entrado() && resource.data.admin == request.auth.uid
+          && (request.resource.data.admin == resource.data.admin || request.resource.data.admin in resource.data.uids)
+          && request.resource.data.admin in request.resource.data.uids
+          && nombreValido(request.resource.data.nombre)
+          && fechaValida(request.resource.data.inicio))
+        // Salirse: solo se quita uno mismo, y el admin no (antes tiene que pasarlo).
+        || (entrado() && request.auth.uid in resource.data.uids
+          && resource.data.admin != request.auth.uid
+          && cambia(["uids"])
+          && request.resource.data.uids.toSet() == resource.data.uids.toSet().difference([request.auth.uid].toSet()))
+        // Unirse con el enlace: solo se añade uno mismo y hay que traer el código bueno.
+        || (entrado()
+          && cambia(["uids", "invitacion"])
+          && request.resource.data.invitacion == resource.data.codigo
+          && request.resource.data.uids.toSet() == resource.data.uids.toSet().union([request.auth.uid].toSet()));
+
+      allow delete: if false;
+
+      // Una ficha por cuenta, con su nombre. Se va al salirse o al echarlo el admin.
+      match /miembros/{uid} {
+        allow read: if esDelTurno(tid);
+        allow create: if esDelTurno(tid)
+          && uid == request.auth.uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(["nombre", "uid"])
+          && nombreValido(request.resource.data.nombre);
+        allow update: if esDelTurno(tid) && uid == request.auth.uid
+          && cambia(["nombre"]) && nombreValido(request.resource.data.nombre);
+        allow delete: if esAdminTurno(tid) || (entrado() && uid == request.auth.uid);
+      }
+
+      // Un día que alguien quiere librar. Cada uno apunta y quita solo los suyos
+      // (el admin también puede quitar). El id es <uid>_<día>.
+      match /dias/{id} {
+        allow read: if esDelTurno(tid);
+        allow create: if esDelTurno(tid)
+          && request.resource.data.keys().hasOnly(["uid", "dia"])
+          && request.resource.data.uid == request.auth.uid
+          && fechaValida(request.resource.data.dia)
+          && id == request.auth.uid + "_" + request.resource.data.dia;
+        allow update: if false;
+        allow delete: if esDelTurno(tid) && (resource.data.uid == request.auth.uid || esAdminTurno(tid));
+      }
+    }
+
     // Cada cuenta guarda solo su propio perfil (nombre).
     match /perfiles/{uid} {
       allow read: if entrado();

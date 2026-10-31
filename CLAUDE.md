@@ -18,6 +18,13 @@ Todo en español: interfaz, nombres de variables y funciones, comentarios y mens
 - `perfiles/{uid}`: `nombre`, y `persona` en los cuatro de siempre.
 - `viajes/{id}` (en la raíz): la colección de antes del multiusuario. Ver «Pendiente».
 
+- **Vacaciones** (aparte de Kundapol, en `vacaciones.html` + `vacaciones.js`, con su `vacaciones.webmanifest`; mismo Firebase, mismo `style.css` y mismo `sw.js`):
+  - `turnos/{tid}`: `nombre`, `inicio` (AAAA-MM-DD, primer día de trabajo de una tanda), `admin` (uid), `uids`, `codigo`, `invitacion`.
+    - `miembros/{uid}`: `nombre` (el de `perfiles`).
+    - `dias/{uid}_{día}`: `uid`, `dia`. Cada uno apunta y quita solo los suyos (el admin también quita).
+  - Se trabajan 6 días y se libran 6 desde `inicio`; la app calcula qué días son de trabajo y solo deja marcar esos. Sin máximo de gente por día. Recuento por persona y año.
+  - Mismo funcionamiento que las cundas: crea el admin, enlace `#unirse=<tid>.<codigo>`, echar, pasar el turno, salirse.
+
 ## Funcionamiento
 
 - Todos tienen cuenta. Una cuenta puede estar en varias cundas.
@@ -62,7 +69,6 @@ Todo en español: interfaz, nombres de variables y funciones, comentarios y mens
 - «Mañana le toca a…»
 - Aviso de viaje repetido el mismo día
 - Quién iba en el coche
-- Vacaciones o ausencias
 - Resumen por meses
 - Recordatorio diario con notificación (necesita el plan de pago por uso de Firebase)
 - Kilómetros y gasolina

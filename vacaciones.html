@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vacaciones</title>
+<meta name="theme-color" content="#f1e9d6">
+<link rel="manifest" href="vacaciones.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vacaciones">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Aviso de versión nueva -->
+<div id="nueva-version" class="nueva-version" role="status" hidden>
+  <span id="nueva-version-texto">Hay una versión nueva.</span>
+  <button id="btn-actualizar" class="boton-solido" type="button">Actualizar</button>
+</div>
+
+<!-- Mientras Firebase comprueba si ya hay sesión -->
+<section id="cargando" class="pantalla" aria-label="Cargando">
+  <svg class="palotes" viewBox="0 0 64 64" aria-hidden="true"><path d="M14 10v44M26 10v44M38 10v44M50 10v44M6 46L58 18"/></svg>
+</section>
+
+<!-- Entrada -->
+<section id="entrada" class="pantalla" hidden>
+  <div class="marca">
+    <svg class="palotes" viewBox="0 0 64 64" aria-hidden="true"><path d="M14 10v44M26 10v44M38 10v44M50 10v44M6 46L58 18"/></svg>
+    <h1>Vacaciones</h1>
+    <p class="lema">Quién quiere librar cada día.</p>
+  </div>
+
+  <button id="btn-google" class="boton-linea" type="button">Entrar con Google</button>
+  <p class="separador"><span>o con correo</span></p>
+
+  <form id="form-correo" autocomplete="on">
+    <label>Correo
+      <input id="correo" type="email" autocomplete="email" required>
+    </label>
+    <label>Contraseña
+      <input id="clave" type="password" autocomplete="current-password" minlength="6" required>
+    </label>
+    <p id="error-entrada" class="error" role="alert" hidden></p>
+    <button id="btn-correo" class="boton-solido" type="submit">Entrar</button>
+    <button id="btn-modo" class="enlace" type="button">No tengo cuenta, crear una</button>
+  </form>
+</section>
+
+<!-- Cómo te llamas -->
+<section id="nombre" class="pantalla" hidden>
+  <h2 class="titulo-pantalla">¿Cómo te llamas?</h2>
+  <p class="nota">Así te verán los de tu turno.</p>
+  <form id="form-nombre">
+    <label>Nombre
+      <input id="mi-nombre" type="text" autocomplete="given-name" maxlength="40" required>
+    </label>
+    <button class="boton-solido" type="submit">Seguir</button>
+  </form>
+</section>
+
+<!-- Tus turnos -->
+<section id="turnos" class="pantalla" hidden>
+  <h2 class="titulo-pantalla">Tus turnos</h2>
+  <p id="sin-turnos" class="nota" hidden>Todavía no estás en ninguno. Crea uno o pide el enlace a quien lo lleve.</p>
+  <ul id="lista-turnos" class="nombres"></ul>
+
+  <form id="form-crear" class="crear">
+    <label>Crear un turno nuevo
+      <input id="crear-nombre" type="text" maxlength="40" placeholder="Turno 2" required>
+    </label>
+    <label>Primer día de trabajo de una tanda
+      <input id="crear-inicio" type="date" required>
+    </label>
+    <p class="nota">Se trabajan 6 días y se libran 6. Con una fecha de arranque la app calcula todas las demás.</p>
+    <button class="boton-solido" type="submit">Crear</button>
+  </form>
+
+  <p class="quien pie-cundas"><span id="soy-turnos"></span> · <button id="btn-renombrar" class="enlace" type="button">cambiar nombre</button> · <button id="btn-salir-2" class="enlace" type="button">salir</button></p>
+  <p class="version"></p>
+</section>
+
+<!-- Un turno -->
+<section id="cuenta" class="pantalla ancha" hidden>
+  <header class="cabecera">
+    <h1 id="turno-nombre">Vacaciones</h1>
+    <p class="quien"><span id="soy"></span> · <button id="btn-invitar" class="enlace" type="button">invitar</button> · <button id="btn-gente" class="enlace" type="button">gente</button> · <button id="btn-cambiar" class="enlace" type="button">turnos</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
+  </header>
+
+  <nav class="mes" aria-label="Mes">
+    <button id="mes-ant" class="mes-flecha" type="button" aria-label="Mes anterior">‹</button>
+    <h2 id="mes-titulo"></h2>
+    <button id="mes-sig" class="mes-flecha" type="button" aria-label="Mes siguiente">›</button>
+  </nav>
+  <p class="nota nota-mes">Toca ✓ en los días que quieras librar. Solo salen los días de trabajo.</p>
+
+  <ol id="dias" class="dias"></ol>
+
+  <h2 class="subtitulo">Recuento <span id="rec-anio"></span></h2>
+  <ul id="recuento" class="recuento"></ul>
+  <p class="version"></p>
+</section>
+
+<!-- Gente del turno -->
+<dialog id="dlg-gente">
+  <form method="dialog">
+    <h3>Gente del turno</h3>
+    <div id="gente-admin" class="gente-admin" hidden>
+      <label>Nombre del turno
+        <input id="gente-nombre" type="text" maxlength="40">
+      </label>
+      <label>Primer día de trabajo de una tanda
+        <input id="gente-inicio" type="date">
+      </label>
+      <button id="btn-gente-guardar" class="enlace" type="button">Guardar</button>
+    </div>
+    <ul id="gente-lista" class="gente"></ul>
+    <p id="gente-nota" class="nota"></p>
+    <button id="btn-salir-turno" class="enlace" type="button" hidden>Salir de este turno</button>
+    <div class="botones">
+      <button value="cancel" class="enlace" type="submit">Cerrar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Invitar -->
+<dialog id="dlg-invitar">
+  <form method="dialog">
+    <h3>Invitar al turno</h3>
+    <p class="nota">Manda este enlace a quien quieras que entre. Tendrá que entrar con su cuenta.</p>
+    <input id="invitar-enlace" type="text" readonly>
+    <button id="btn-compartir" class="boton-solido compartir" type="button">Compartir enlace</button>
+    <button id="btn-enlace-nuevo" class="enlace" type="button" hidden>Hacer un enlace nuevo (el anterior deja de valer)</button>
+    <div class="botones">
+      <button value="cancel" class="enlace" type="submit">Cerrar</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="aviso" role="status" aria-live="polite" hidden>
+  <span id="aviso-texto"></span>
+  <button id="aviso-deshacer" class="enlace" type="button" hidden>Deshacer</button>
+</div>
+
+<script type="module" src="vacaciones.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 // Deja abrir la app sin cobertura. Los datos de Firestore NO pasan por aquí:
 // los guarda su propia caché y se sincronizan cuando vuelve la señal.
 const CACHE = "cundapol-v6";
-const BASICOS = ["./", "index.html", "style.css", "app.js", "version.js", "icon.svg", "manifest.webmanifest"];
+const BASICOS = ["./", "index.html", "vacaciones.html", "style.css", "app.js", "vacaciones.js", "version.js", "icon.svg", "manifest.webmanifest", "vacaciones.webmanifest"];
 
 // Solo lo nuestro y lo que se descarga como librería o tipografía.
 const HOSTS_CACHEABLES = ["www.gstatic.com", "fonts.googleapis.com", "fonts.gstatic.com"];
