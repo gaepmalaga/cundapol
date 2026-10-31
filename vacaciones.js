@@ -33,7 +33,8 @@ const $ = (id) => document.getElementById(id);
 const estado = {
   user: null, perfil: { nombre: null },
   turnos: [], turnosListos: false,
-  tid: null, turno: null, miembros: [], dias: [], mes: null,
+  tid: null, turno: null, miembros: [], dias: [], mes: null, sel: null,
+  vista: "mes",
   modoAlta: false, autoAbrir: false, saliendo: false,
 };
 let dejarDeEscucharTurnos = null;
@@ -48,8 +49,6 @@ const aFecha = (iso) => {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d);
 };
-const fmtDia = (iso) =>
-  aFecha(iso).toLocaleDateString("es-ES", { weekday: "short", day: "numeric" }).replace(/\./g, "");
 const fmtMes = (d) => d.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const porNombre = (a, b) => a.nombre.localeCompare(b.nombre, "es");
@@ -57,6 +56,7 @@ const fechaValida = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && aISO(aFecha(s)) === 
 
 const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+estado.vista = leer("vacaciones.vista") === "lista" ? "lista" : "mes";
 
 function nuevoCodigo() {
   const b = crypto.getRandomValues(new Uint8Array(12));
@@ -288,7 +288,7 @@ function dejarTurno() {
 function abrirTurno(tid) {
   dejarTurno();
   const hoy = new Date();
-  Object.assign(estado, { tid, turno: null, miembros: [], dias: [], mes: new Date(hoy.getFullYear(), hoy.getMonth(), 1) });
+  Object.assign(estado, { tid, turno: null, miembros: [], dias: [], sel: null, mes: new Date(hoy.getFullYear(), hoy.getMonth(), 1) });
   guardar("vacaciones.turno", tid);
   mostrar("cargando");
   const ref = doc(db, "turnos", tid);
@@ -341,6 +341,10 @@ async function asegurarMiembro() {
 
 /* ---------- el calendario ---------- */
 
+const fmtRango = (iso) => aFecha(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" }).replace(/\./g, "");
+const fmtLargo = (iso) => aFecha(iso).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+const dia3 = (iso) => aFecha(iso).toLocaleDateString("es-ES", { weekday: "short" }).replace(/\./g, "");
+
 function pintar() {
   if (!estado.turno || !estado.mes) return;
   const uid = estado.user.uid;
@@ -350,43 +354,29 @@ function pintar() {
   $("turno-nombre").textContent = estado.turno.nombre;
   $("soy").textContent = estado.perfil.nombre ?? "";
   $("mes-titulo").textContent = fmtMes(estado.mes);
+  for (const b of document.querySelectorAll("[data-vista]")) b.setAttribute("aria-pressed", String(b.dataset.vista === estado.vista));
+  $("vista-mes").hidden = estado.vista !== "mes";
+  $("vista-lista").hidden = estado.vista !== "lista";
 
   const pedidos = new Map(); // día → [uid]
   for (const d of dias) {
     if (!pedidos.has(d.dia)) pedidos.set(d.dia, []);
     pedidos.get(d.dia).push(d.uid);
   }
+  const quienes = (iso) => (pedidos.get(iso) ?? []).map((u) => ({ u, nombre: gente.get(u) })).sort(porNombre);
 
   const y = estado.mes.getFullYear();
   const m = estado.mes.getMonth();
   const ultimo = new Date(y, m + 1, 0).getDate();
   const hoy = hoyISO();
-  const filas = [];
-  let grupo = null;
-  for (let n = 1; n <= ultimo; n++) {
-    const iso = `${y}-${pad(m + 1)}-${pad(n)}`;
-    if (!trabaja(iso)) continue;
-    const tanda = tandaDe(iso);
-    if (!grupo || grupo.tanda !== tanda) filas.push((grupo = { tanda, dias: [] }));
-    grupo.dias.push(iso);
-  }
+  const iso = (n) => `${y}-${pad(m + 1)}-${pad(n)}`;
+  const laborables = [];
+  for (let n = 1; n <= ultimo; n++) if (trabaja(iso(n))) laborables.push(iso(n));
 
-  $("dias").innerHTML = filas.map((g) => {
-    const todos = g.dias.every((iso) => pedidos.get(iso)?.includes(uid));
-    const cabeza = `<li class="cabeza-tanda"><span>${esc(fmtDia(g.dias[0]))} – ${esc(fmtDia(g.dias.at(-1)))}</span>
-      <button class="enlace" type="button" data-tanda="${g.dias.join(",")}" data-quitar="${todos}">${todos ? "Quitar todos" : "Pedir todos"}</button></li>`;
-    return cabeza + g.dias.map((iso) => {
-      const quienes = (pedidos.get(iso) ?? []).map((u) => ({ u, nombre: gente.get(u) })).sort(porNombre);
-      const mio = quienes.some((q) => q.u === uid);
-      const nombres = quienes.map((q) => q.u === uid ? `<strong>${esc(q.nombre)}</strong>` : esc(q.nombre)).join(", ");
-      return `<li class="dia${iso === hoy ? " hoy-dia" : ""}${mio ? " mia" : ""}">
-        <span class="cuando">${esc(fmtDia(iso))}</span>
-        <span class="quienes">${nombres || `<span class="nadie">—</span>`}</span>
-        <span class="cuantos">${quienes.length || ""}</span>
-        <button class="marca-dia" type="button" data-dia="${iso}" aria-pressed="${mio}" aria-label="Vacaciones el ${esc(fmtDia(iso))}">✓</button>
-      </li>`;
-    }).join("");
-  }).join("") || `<li class="vacio">Este mes no hay días de trabajo.</li>`;
+  if (!laborables.includes(estado.sel)) estado.sel = laborables.includes(hoy) ? hoy : null;
+
+  if (estado.vista === "mes") pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid });
+  else pintarLista({ laborables, hoy, quienes, pedidos, uid });
 
   $("rec-anio").textContent = y;
   const cuentas = new Map([...gente.keys()].map((u) => [u, 0]));
@@ -400,6 +390,59 @@ function pintar() {
   if ($("dlg-gente").open) pintarGente();
 }
 
+// Calendario del mes: cada día de trabajo se oscurece cuanta más gente lo pide.
+function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid }) {
+  const max = Math.max(1, ...laborables.map((d) => quienes(d).length));
+  const primero = (new Date(y, m, 1).getDay() + 6) % 7; // lunes primero
+  let celdas = "";
+  for (let i = 0; i < primero; i++) celdas += `<div class="cel vacia"></div>`;
+  for (let n = 1; n <= ultimo; n++) {
+    const d = iso(n);
+    const clases = `${d < hoy ? " pasado" : ""}${d === hoy ? " hoy-cel" : ""}`;
+    if (!laborables.includes(d)) { celdas += `<div class="cel${clases}"><span class="d">${n}</span></div>`; continue; }
+    const cuantos = quienes(d).length;
+    const t = cuantos / max;
+    const mio = pedidos.get(d)?.includes(uid);
+    celdas += `<button class="cel trab${clases}${mio ? " mio" : ""}${t > 0.55 ? " fuerte" : ""}${estado.sel === d ? " sel" : ""}" type="button" data-sel="${d}"
+      style="background: color-mix(in srgb, var(--marca) ${Math.round(cuantos ? 12 + t * 80 : 0)}%, var(--papel-2)); ${t > 0.55 ? "color: #fff" : ""}"
+      aria-label="${esc(fmtLargo(d))}, ${cuantos} ${cuantos === 1 ? "persona" : "personas"}"><span class="d">${n}</span><span class="n">${cuantos || ""}</span></button>`;
+  }
+  $("rejilla").innerHTML = celdas;
+  $("leyenda-max").textContent = `Muchos (${max})`;
+
+  const d = estado.sel;
+  if (!d) { $("detalle").innerHTML = `<p class="nota">Toca un día para ver quién lo ha pedido.</p>`; return; }
+  const q = quienes(d);
+  const mio = q.some((x) => x.u === uid);
+  $("detalle").innerHTML = `<h4>${esc(fmtLargo(d))}<small>${q.length} ${q.length === 1 ? "persona" : "personas"}</small></h4>
+    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>
+    <button class="btn-yo${mio ? " quitar" : ""}" type="button" data-dia="${d}">${mio ? "Quitar mis vacaciones este día" : "Pedir este día"}</button>`;
+}
+
+// Lista del mes: un día por línea, agrupados por tanda de trabajo.
+function pintarLista({ laborables, hoy, quienes, pedidos, uid }) {
+  const grupos = [];
+  for (const d of laborables) {
+    const t = tandaDe(d);
+    if (grupos.at(-1)?.t !== t) grupos.push({ t, dias: [] });
+    grupos.at(-1).dias.push(d);
+  }
+  $("dias").innerHTML = grupos.map((g) => {
+    const todos = g.dias.every((d) => pedidos.get(d)?.includes(uid));
+    const filas = g.dias.map((d) => {
+      const q = quienes(d);
+      const mio = q.some((x) => x.u === uid);
+      const nombres = q.map((x) => x.u === uid ? `<b>${esc(x.nombre)}</b>` : esc(x.nombre)).join(", ");
+      return `<button class="fila-dia${mio ? " mia" : ""}${d === hoy ? " hoy-dia" : ""}${d < hoy ? " pasado" : ""}" type="button" data-dia="${d}" aria-pressed="${mio}" aria-label="Vacaciones el ${esc(fmtLargo(d))}">
+        <span class="cu">${esc(dia3(d))}<small>${Number(d.slice(8))}</small></span>
+        <span class="qu">${nombres || `<span class="nadie">—</span>`}</span>
+        <span class="co">${q.length || ""}</span><span class="ck">✓</span></button>`;
+    }).join("");
+    return `<div class="grupo"><div class="grupo-cab"><span>${esc(fmtRango(g.dias[0]))} – ${esc(fmtRango(g.dias.at(-1)))}</span>
+      <button class="enlace" type="button" data-tanda="${g.dias.join(",")}" data-quitar="${todos}">${todos ? "Quitar todos" : "Pedir todos"}</button></div>${filas}</div>`;
+  }).join("") || `<p class="vacio">Este mes no hay días de trabajo.</p>`;
+}
+
 function moverMes(delta) {
   estado.mes = new Date(estado.mes.getFullYear(), estado.mes.getMonth() + delta, 1);
   pintar();
@@ -407,14 +450,20 @@ function moverMes(delta) {
 $("mes-ant").onclick = () => moverMes(-1);
 $("mes-sig").onclick = () => moverMes(1);
 
+for (const b of document.querySelectorAll("[data-vista]")) {
+  b.onclick = () => { estado.vista = b.dataset.vista; guardar("vacaciones.vista", estado.vista); pintar(); };
+}
+
 const idDia = (uid, dia) => `${uid}_${dia}`;
 const refDia = (dia) => doc(db, "turnos", estado.tid, "dias", idDia(estado.user.uid, dia));
 
-$("dias").onclick = async (ev) => {
+$("cuenta").addEventListener("click", async (ev) => {
   const uid = estado.user.uid;
   const mios = new Set(estado.dias.filter((d) => d.uid === uid).map((d) => d.dia));
+  const btnSel = ev.target.closest("button[data-sel]");
   const btnDia = ev.target.closest("button[data-dia]");
   const btnTanda = ev.target.closest("button[data-tanda]");
+  if (btnSel) { estado.sel = btnSel.dataset.sel; return pintar(); }
   try {
     if (btnDia) {
       const dia = btnDia.dataset.dia;
@@ -430,7 +479,7 @@ $("dias").onclick = async (ev) => {
       await lote.commit();
     }
   } catch (e) { errorDatos(e); }
-};
+});
 
 /* ---------- gente del turno ---------- */
 
