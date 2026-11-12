@@ -105,9 +105,10 @@
   </div>
 
   <div class="tipos" role="group" aria-label="Qué tipo de día marcas">
-    <p class="tipos-tit">Toca un día para marcarlo como:</p>
+    <p class="tipos-tit" id="tipos-tit"></p>
     <div class="tipos-bot">
-      <button type="button" data-tipo="vac" class="t-vac" aria-pressed="true">Vacaciones <i>VAC</i></button>
+      <button type="button" data-tipo="" class="t-ver" aria-pressed="true">Ver</button>
+      <button type="button" data-tipo="vac" class="t-vac" aria-pressed="false">Vacaciones <i>VAC</i></button>
       <button type="button" data-tipo="ss" class="t-ss" aria-pressed="false">Semana Santa <i>SS</i></button>
       <button type="button" data-tipo="nav" class="t-nav" aria-pressed="false">Navidad <i>NAV</i></button>
       <button type="button" data-tipo="ap" class="t-ap" aria-pressed="false">Asuntos propios <i>AP</i></button>
@@ -119,12 +120,12 @@
     <div id="rejilla" class="rej"></div>
     <div id="detalle" class="det"></div>
     <div class="leyenda" aria-hidden="true"><span>Pocos</span><i class="l1"></i><i class="l2"></i><i class="l3"></i><span id="leyenda-max">Muchos</span></div>
-    <p class="nota nota-mes">Gris: días de descanso. Tus días llevan sus siglas. Tocar otra vez un día tuyo del mismo tipo lo quita. Los días ya pasados quedan de historial.</p>
+    <p class="nota nota-mes">Gris: días de descanso. Tus días llevan sus siglas. Con un tipo elegido, tocar otra vez un día tuyo del mismo tipo lo quita. Los días ya pasados quedan de historial.</p>
   </div>
 
   <div id="vista-lista" hidden>
     <div id="dias"></div>
-    <p class="nota nota-mes">Toca una línea para marcar ese día con el tipo elegido. Solo salen los días de trabajo.</p>
+    <p class="nota nota-mes">Con un tipo elegido, toca una línea para marcar ese día. Solo salen los días de trabajo.</p>
   </div>
 
   <h2 class="subtitulo">Recuento <span id="rec-anio"></span></h2>
