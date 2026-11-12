@@ -44,7 +44,7 @@ const estado = {
   user: null, perfil: { nombre: null },
   turnos: [], turnosListos: false,
   tid: null, turno: null, miembros: [], dias: [], mes: null, sel: null,
-  vista: "mes", tipo: null,
+  vista: "mes", modo: "ver", tipo: "vac",
   modoAlta: false, autoAbrir: false, saliendo: false,
 };
 let dejarDeEscucharTurnos = null;
@@ -67,8 +67,9 @@ const fechaValida = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && aISO(aFecha(s)) === 
 const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 estado.vista = leer("vacaciones.vista") === "lista" ? "lista" : "mes";
-// Sin tipo elegido (null) es el modo «Ver»: tocar un día solo lo selecciona. Siempre se abre en «Ver»
-// para no marcar nada sin querer.
+// Modo «ver»: tocar un día solo lo selecciona. Modo «marcar»: marca con el tipo elegido. Siempre se
+// abre en «ver» para no marcar nada sin querer.
+const tipoActivo = () => (estado.modo === "marcar" ? estado.tipo : null);
 
 function nuevoCodigo() {
   const b = crypto.getRandomValues(new Uint8Array(12));
@@ -370,8 +371,12 @@ function pintar() {
   $("vista-mes").hidden = estado.vista !== "mes";
   $("vista-lista").hidden = estado.vista !== "lista";
 
-  for (const b of document.querySelectorAll("[data-tipo]")) b.setAttribute("aria-pressed", String((b.dataset.tipo || null) === estado.tipo));
-  $("tipos-tit").textContent = estado.tipo ? `Toca un día para marcarlo como ${TIPOS[estado.tipo].nombre}:` : "Toca un día para ver quién lo ha pedido. Para marcar, elige un tipo:";
+  for (const b of document.querySelectorAll("[data-modo]")) b.setAttribute("aria-pressed", String(b.dataset.modo === estado.modo));
+  for (const b of document.querySelectorAll("[data-tipo]")) b.setAttribute("aria-pressed", String(b.dataset.tipo === estado.tipo));
+  $("tipos").hidden = estado.modo !== "marcar";
+  $("modo-nota").textContent = estado.modo === "marcar"
+    ? `Cada día que toques se marca como ${TIPOS[estado.tipo].nombre}. Si ya lo tenías así, se quita.`
+    : "Toca un día para ver quién lo ha pedido.";
 
   const pedidos = new Map(); // día → [{ u, tipo }]
   for (const d of dias) {
@@ -453,7 +458,8 @@ function pintarLista({ laborables, hoy, quienes, pedidos, uid }) {
     grupos.at(-1).dias.push(d);
   }
   $("dias").innerHTML = grupos.map((g) => {
-    const todos = !!estado.tipo && g.dias.every((d) => pedidos.get(d)?.some((x) => x.u === uid && x.tipo === estado.tipo));
+    const activo = tipoActivo();
+    const todos = !!activo && g.dias.every((d) => pedidos.get(d)?.some((x) => x.u === uid && x.tipo === activo));
     const filas = g.dias.map((d) => {
       const q = quienes(d);
       const mio = q.find((x) => x.u === uid);
@@ -464,7 +470,7 @@ function pintarLista({ laborables, hoy, quienes, pedidos, uid }) {
         <span class="co">${q.length || ""}</span><span class="ck">${mio ? siglas(mio.tipo) : ""}</span></button>`;
     }).join("");
     return `<div class="grupo"><div class="grupo-cab"><span>${esc(fmtRango(g.dias[0]))} – ${esc(fmtRango(g.dias.at(-1)))}</span>
-      ${estado.tipo ? `<button class="enlace" type="button" data-tanda="${g.dias.join(",")}" data-quitar="${todos}">${todos ? "Quitar todos" : `Marcar todos ${TIPOS[estado.tipo].siglas}`}</button>` : ""}</div>${filas}</div>`;
+      ${activo ? `<button class="enlace" type="button" data-tanda="${g.dias.join(",")}" data-quitar="${todos}">${todos ? "Quitar todos" : `Marcar todos ${TIPOS[activo].siglas}`}</button>` : ""}</div>${filas}</div>`;
   }).join("") || `<p class="vacio">Este mes no hay días de trabajo.</p>`;
 }
 
@@ -476,7 +482,11 @@ $("mes-ant").onclick = () => moverMes(-1);
 $("mes-sig").onclick = () => moverMes(1);
 
 for (const b of document.querySelectorAll("[data-tipo]")) {
-  b.onclick = () => { estado.tipo = b.dataset.tipo || null; pintar(); };
+  b.onclick = () => { estado.tipo = b.dataset.tipo; pintar(); };
+}
+
+for (const b of document.querySelectorAll("[data-modo]")) {
+  b.onclick = () => { estado.modo = b.dataset.modo; pintar(); };
 }
 
 for (const b of document.querySelectorAll("[data-vista]")) {
@@ -488,7 +498,7 @@ const refDia = (dia) => doc(db, "turnos", estado.tid, "dias", idDia(estado.user.
 
 $("cuenta").addEventListener("click", async (ev) => {
   const uid = estado.user.uid;
-  const tipo = estado.tipo;
+  const tipo = tipoActivo();
   const mios = new Map(estado.dias.filter((d) => d.uid === uid).map((d) => [d.dia, tipoDe(d)]));
   const btnSel = ev.target.closest("button[data-sel]");
   const btnDia = ev.target.closest("button[data-dia]");

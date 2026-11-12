@@ -104,15 +104,18 @@
     <button type="button" data-vista="lista" aria-pressed="false">Lista</button>
   </div>
 
-  <div class="tipos" role="group" aria-label="Qué tipo de día marcas">
-    <p class="tipos-tit" id="tipos-tit"></p>
-    <div class="tipos-bot">
-      <button type="button" data-tipo="" class="t-ver" aria-pressed="true">Ver</button>
-      <button type="button" data-tipo="vac" class="t-vac" aria-pressed="false">Vacaciones <i>VAC</i></button>
-      <button type="button" data-tipo="ss" class="t-ss" aria-pressed="false">Semana Santa <i>SS</i></button>
-      <button type="button" data-tipo="nav" class="t-nav" aria-pressed="false">Navidad <i>NAV</i></button>
-      <button type="button" data-tipo="ap" class="t-ap" aria-pressed="false">Asuntos propios <i>AP</i></button>
+  <div class="marcar">
+    <div class="modo" role="group" aria-label="Qué quieres hacer">
+      <button type="button" data-modo="ver" aria-pressed="true">Ver</button>
+      <button type="button" data-modo="marcar" aria-pressed="false">Marcar días</button>
     </div>
+    <div id="tipos" class="tipos" role="group" aria-label="Tipo de día" hidden>
+      <button type="button" data-tipo="vac" class="t-vac" aria-pressed="true"><span class="tn">Vacaciones</span><i>VAC</i></button>
+      <button type="button" data-tipo="ss" class="t-ss" aria-pressed="false"><span class="tn">Semana Santa</span><i>SS</i></button>
+      <button type="button" data-tipo="nav" class="t-nav" aria-pressed="false"><span class="tn">Navidad</span><i>NAV</i></button>
+      <button type="button" data-tipo="ap" class="t-ap" aria-pressed="false"><span class="tn">Asuntos propios</span><i>AP</i></button>
+    </div>
+    <p class="modo-nota" id="modo-nota"></p>
   </div>
 
   <div id="vista-mes">
