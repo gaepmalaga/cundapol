@@ -20,6 +20,16 @@ const firebaseConfig = {
 };
 
 // Se trabajan 6 días y se libran 6.
+// Tipos de día que se pueden pedir. Un día sin tipo (de antes de que existieran) es Vacaciones.
+const TIPOS = {
+  vac: { nombre: "Vacaciones", siglas: "VAC" },
+  ss: { nombre: "Semana Santa", siglas: "SS" },
+  nav: { nombre: "Navidad", siglas: "NAV" },
+  ap: { nombre: "Asuntos propios", siglas: "AP" },
+};
+const tipoDe = (d) => (TIPOS[d.tipo] ? d.tipo : "vac");
+const siglas = (t) => `<i class="sg t-${t}" title="${TIPOS[t].nombre}">${TIPOS[t].siglas}</i>`;
+
 const TRABAJO = 6;
 const CICLO = 12;
 
@@ -34,7 +44,7 @@ const estado = {
   user: null, perfil: { nombre: null },
   turnos: [], turnosListos: false,
   tid: null, turno: null, miembros: [], dias: [], mes: null, sel: null,
-  vista: "mes",
+  vista: "mes", tipo: "vac",
   modoAlta: false, autoAbrir: false, saliendo: false,
 };
 let dejarDeEscucharTurnos = null;
@@ -57,6 +67,7 @@ const fechaValida = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && aISO(aFecha(s)) === 
 const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 estado.vista = leer("vacaciones.vista") === "lista" ? "lista" : "mes";
+estado.tipo = leer("vacaciones.tipo") in TIPOS ? leer("vacaciones.tipo") : "vac";
 
 function nuevoCodigo() {
   const b = crypto.getRandomValues(new Uint8Array(12));
@@ -358,12 +369,14 @@ function pintar() {
   $("vista-mes").hidden = estado.vista !== "mes";
   $("vista-lista").hidden = estado.vista !== "lista";
 
-  const pedidos = new Map(); // día → [uid]
+  for (const b of document.querySelectorAll("[data-tipo]")) b.setAttribute("aria-pressed", String(b.dataset.tipo === estado.tipo));
+
+  const pedidos = new Map(); // día → [{ u, tipo }]
   for (const d of dias) {
     if (!pedidos.has(d.dia)) pedidos.set(d.dia, []);
-    pedidos.get(d.dia).push(d.uid);
+    pedidos.get(d.dia).push({ u: d.uid, tipo: tipoDe(d) });
   }
-  const quienes = (iso) => (pedidos.get(iso) ?? []).map((u) => ({ u, nombre: gente.get(u) })).sort(porNombre);
+  const quienes = (iso) => (pedidos.get(iso) ?? []).map((x) => ({ ...x, nombre: gente.get(x.u) })).sort(porNombre);
 
   const y = estado.mes.getFullYear();
   const m = estado.mes.getMonth();
@@ -379,12 +392,20 @@ function pintar() {
   else pintarLista({ laborables, hoy, quienes, pedidos, uid });
 
   $("rec-anio").textContent = y;
-  const cuentas = new Map([...gente.keys()].map((u) => [u, 0]));
-  for (const d of dias) if (d.dia.startsWith(`${y}-`)) cuentas.set(d.uid, cuentas.get(d.uid) + 1);
+  const cuentas = new Map([...gente.keys()].map((u) => [u, { n: 0, tipos: {} }]));
+  for (const d of dias) {
+    if (!d.dia.startsWith(`${y}-`)) continue;
+    const c = cuentas.get(d.uid);
+    c.n++;
+    c.tipos[tipoDe(d)] = (c.tipos[tipoDe(d)] ?? 0) + 1;
+  }
   $("recuento").innerHTML = [...cuentas]
-    .map(([u, n]) => ({ u, nombre: gente.get(u), n }))
+    .map(([u, c]) => ({ u, nombre: gente.get(u), ...c }))
     .sort(porNombre)
-    .map((p) => `<li><span class="nom">${esc(p.nombre)}${p.u === uid ? `<span class="dif">tú</span>` : ""}</span><span class="num">${p.n}</span></li>`)
+    .map((p) => {
+      const desglose = Object.keys(TIPOS).filter((t) => p.tipos[t]).map((t) => `${siglas(t)} ${p.tipos[t]}`).join(" ");
+      return `<li><span class="nom">${esc(p.nombre)}${p.u === uid ? `<span class="dif">tú</span>` : ""}${desglose ? `<span class="dif desglose">${desglose}</span>` : ""}</span><span class="num">${p.n}</span></li>`;
+    })
     .join("");
 
   if ($("dlg-gente").open) pintarGente();
@@ -402,21 +423,21 @@ function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid }
     if (!laborables.includes(d)) { celdas += `<div class="cel${clases}"><span class="d">${n}</span></div>`; continue; }
     const cuantos = quienes(d).length;
     const t = cuantos / max;
-    const mio = pedidos.get(d)?.includes(uid);
+    const mio = pedidos.get(d)?.find((x) => x.u === uid);
     celdas += `<button class="cel trab${clases}${mio ? " mio" : ""}${t > 0.55 ? " fuerte" : ""}${estado.sel === d ? " sel" : ""}" type="button" data-sel="${d}"
       style="background: color-mix(in srgb, var(--marca) ${Math.round(cuantos ? 12 + t * 80 : 0)}%, var(--papel-2)); ${t > 0.55 ? "color: #fff" : ""}"
-      aria-label="${esc(fmtLargo(d))}, ${cuantos} ${cuantos === 1 ? "persona" : "personas"}"><span class="d">${n}</span><span class="n">${cuantos || ""}</span></button>`;
+      aria-label="${esc(fmtLargo(d))}, ${cuantos} ${cuantos === 1 ? "persona" : "personas"}"><span class="d">${n}</span><span class="n">${cuantos || ""}</span>${mio ? siglas(mio.tipo) : ""}</button>`;
   }
   $("rejilla").innerHTML = celdas;
   $("leyenda-max").textContent = `Muchos (${max})`;
 
   const d = estado.sel;
-  if (!d) { $("detalle").innerHTML = `<p class="nota">Toca un día para ver quién lo ha pedido.</p>`; return; }
+  if (!d) { $("detalle").innerHTML = `<p class="nota">Toca un día para marcarlo y ver quién más lo ha pedido.</p>`; return; }
   const q = quienes(d);
   const mio = q.some((x) => x.u === uid);
   $("detalle").innerHTML = `<h4>${esc(fmtLargo(d))}<small>${q.length} ${q.length === 1 ? "persona" : "personas"}</small></h4>
-    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>
-    <button class="btn-yo${mio ? " quitar" : ""}" type="button" data-dia="${d}">${mio ? "Quitar mis vacaciones este día" : "Pedir este día"}</button>`;
+    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)} ${siglas(x.tipo)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>
+    ${mio ? `<button class="btn-yo quitar" type="button" data-fuera="${d}">Quitar mi día</button>` : ""}`;
 }
 
 // Lista del mes: un día por línea, agrupados por tanda de trabajo.
@@ -428,18 +449,18 @@ function pintarLista({ laborables, hoy, quienes, pedidos, uid }) {
     grupos.at(-1).dias.push(d);
   }
   $("dias").innerHTML = grupos.map((g) => {
-    const todos = g.dias.every((d) => pedidos.get(d)?.includes(uid));
+    const todos = g.dias.every((d) => pedidos.get(d)?.some((x) => x.u === uid && x.tipo === estado.tipo));
     const filas = g.dias.map((d) => {
       const q = quienes(d);
-      const mio = q.some((x) => x.u === uid);
-      const nombres = q.map((x) => x.u === uid ? `<b>${esc(x.nombre)}</b>` : esc(x.nombre)).join(", ");
-      return `<button class="fila-dia${mio ? " mia" : ""}${d === hoy ? " hoy-dia" : ""}${d < hoy ? " pasado" : ""}" type="button" data-dia="${d}" aria-pressed="${mio}" aria-label="Vacaciones el ${esc(fmtLargo(d))}">
+      const mio = q.find((x) => x.u === uid);
+      const nombres = q.map((x) => `${x.u === uid ? `<b>${esc(x.nombre)}</b>` : esc(x.nombre)} ${siglas(x.tipo)}`).join(" ");
+      return `<button class="fila-dia${mio ? " mia" : ""}${d === hoy ? " hoy-dia" : ""}${d < hoy ? " pasado" : ""}" type="button" data-dia="${d}" aria-pressed="${!!mio}" aria-label="${esc(TIPOS[estado.tipo].nombre)} el ${esc(fmtLargo(d))}">
         <span class="cu">${esc(dia3(d))}<small>${Number(d.slice(8))}</small></span>
         <span class="qu">${nombres || `<span class="nadie">—</span>`}</span>
-        <span class="co">${q.length || ""}</span><span class="ck">✓</span></button>`;
+        <span class="co">${q.length || ""}</span><span class="ck">${mio ? siglas(mio.tipo) : ""}</span></button>`;
     }).join("");
     return `<div class="grupo"><div class="grupo-cab"><span>${esc(fmtRango(g.dias[0]))} – ${esc(fmtRango(g.dias.at(-1)))}</span>
-      <button class="enlace" type="button" data-tanda="${g.dias.join(",")}" data-quitar="${todos}">${todos ? "Quitar todos" : "Pedir todos"}</button></div>${filas}</div>`;
+      <button class="enlace" type="button" data-tanda="${g.dias.join(",")}" data-quitar="${todos}">${todos ? "Quitar todos" : `Marcar todos ${TIPOS[estado.tipo].siglas}`}</button></div>${filas}</div>`;
   }).join("") || `<p class="vacio">Este mes no hay días de trabajo.</p>`;
 }
 
@@ -450,6 +471,10 @@ function moverMes(delta) {
 $("mes-ant").onclick = () => moverMes(-1);
 $("mes-sig").onclick = () => moverMes(1);
 
+for (const b of document.querySelectorAll("[data-tipo]")) {
+  b.onclick = () => { estado.tipo = b.dataset.tipo; guardar("vacaciones.tipo", estado.tipo); pintar(); };
+}
+
 for (const b of document.querySelectorAll("[data-vista]")) {
   b.onclick = () => { estado.vista = b.dataset.vista; guardar("vacaciones.vista", estado.vista); pintar(); };
 }
@@ -459,22 +484,27 @@ const refDia = (dia) => doc(db, "turnos", estado.tid, "dias", idDia(estado.user.
 
 $("cuenta").addEventListener("click", async (ev) => {
   const uid = estado.user.uid;
-  const mios = new Set(estado.dias.filter((d) => d.uid === uid).map((d) => d.dia));
+  const tipo = estado.tipo;
+  const mios = new Map(estado.dias.filter((d) => d.uid === uid).map((d) => [d.dia, tipoDe(d)]));
   const btnSel = ev.target.closest("button[data-sel]");
   const btnDia = ev.target.closest("button[data-dia]");
+  const btnFuera = ev.target.closest("button[data-fuera]");
   const btnTanda = ev.target.closest("button[data-tanda]");
-  if (btnSel) { estado.sel = btnSel.dataset.sel; return pintar(); }
   try {
-    if (btnDia) {
-      const dia = btnDia.dataset.dia;
-      if (mios.has(dia)) await deleteDoc(refDia(dia));
-      else await setDoc(refDia(dia), { uid, dia });
+    // Con un tipo elegido, tocar un día lo marca con él; si ya lo tenías con ese tipo, lo quita.
+    if (btnSel || btnDia) {
+      const dia = (btnSel ?? btnDia).dataset.sel ?? btnDia.dataset.dia;
+      if (btnSel) estado.sel = dia;
+      if (mios.get(dia) === tipo) await deleteDoc(refDia(dia));
+      else await setDoc(refDia(dia), { uid, dia, tipo });
+    } else if (btnFuera) {
+      await deleteDoc(refDia(btnFuera.dataset.fuera));
     } else if (btnTanda) {
       const lote = writeBatch(db);
       const quitar = btnTanda.dataset.quitar === "true";
       for (const dia of btnTanda.dataset.tanda.split(",")) {
         if (quitar) lote.delete(refDia(dia));
-        else if (!mios.has(dia)) lote.set(refDia(dia), { uid, dia });
+        else if (mios.get(dia) !== tipo) lote.set(refDia(dia), { uid, dia, tipo });
       }
       await lote.commit();
     }
