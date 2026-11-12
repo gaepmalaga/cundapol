@@ -44,7 +44,7 @@ const estado = {
   user: null, perfil: { nombre: null },
   turnos: [], turnosListos: false,
   tid: null, turno: null, miembros: [], dias: [], mes: null, sel: null,
-  vista: "mes", tipo: "vac",
+  vista: "mes", tipo: null,
   modoAlta: false, autoAbrir: false, saliendo: false,
 };
 let dejarDeEscucharTurnos = null;
@@ -67,7 +67,8 @@ const fechaValida = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && aISO(aFecha(s)) === 
 const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 estado.vista = leer("vacaciones.vista") === "lista" ? "lista" : "mes";
-estado.tipo = leer("vacaciones.tipo") in TIPOS ? leer("vacaciones.tipo") : "vac";
+// Sin tipo elegido (null) es el modo «Ver»: tocar un día solo lo selecciona. Siempre se abre en «Ver»
+// para no marcar nada sin querer.
 
 function nuevoCodigo() {
   const b = crypto.getRandomValues(new Uint8Array(12));
@@ -369,7 +370,8 @@ function pintar() {
   $("vista-mes").hidden = estado.vista !== "mes";
   $("vista-lista").hidden = estado.vista !== "lista";
 
-  for (const b of document.querySelectorAll("[data-tipo]")) b.setAttribute("aria-pressed", String(b.dataset.tipo === estado.tipo));
+  for (const b of document.querySelectorAll("[data-tipo]")) b.setAttribute("aria-pressed", String((b.dataset.tipo || null) === estado.tipo));
+  $("tipos-tit").textContent = estado.tipo ? `Toca un día para marcarlo como ${TIPOS[estado.tipo].nombre}:` : "Toca un día para ver quién lo ha pedido. Para marcar, elige un tipo:";
 
   const pedidos = new Map(); // día → [{ u, tipo }]
   for (const d of dias) {
@@ -399,7 +401,9 @@ function pintar() {
     c.n++;
     c.tipos[tipoDe(d)] = (c.tipos[tipoDe(d)] ?? 0) + 1;
   }
+  const admin = soyAdmin();
   $("recuento").innerHTML = [...cuentas]
+    .filter(([u]) => admin || u === uid)
     .map(([u, c]) => ({ u, nombre: gente.get(u), ...c }))
     .sort(porNombre)
     .map((p) => {
@@ -449,18 +453,18 @@ function pintarLista({ laborables, hoy, quienes, pedidos, uid }) {
     grupos.at(-1).dias.push(d);
   }
   $("dias").innerHTML = grupos.map((g) => {
-    const todos = g.dias.every((d) => pedidos.get(d)?.some((x) => x.u === uid && x.tipo === estado.tipo));
+    const todos = !!estado.tipo && g.dias.every((d) => pedidos.get(d)?.some((x) => x.u === uid && x.tipo === estado.tipo));
     const filas = g.dias.map((d) => {
       const q = quienes(d);
       const mio = q.find((x) => x.u === uid);
       const nombres = q.map((x) => `${x.u === uid ? `<b>${esc(x.nombre)}</b>` : esc(x.nombre)} ${siglas(x.tipo)}`).join(" ");
-      return `<button class="fila-dia${mio ? " mia" : ""}${d === hoy ? " hoy-dia" : ""}${d < hoy ? " pasado" : ""}" type="button" data-dia="${d}" aria-pressed="${!!mio}" aria-label="${esc(TIPOS[estado.tipo].nombre)} el ${esc(fmtLargo(d))}">
+      return `<button class="fila-dia${mio ? " mia" : ""}${d === hoy ? " hoy-dia" : ""}${d < hoy ? " pasado" : ""}" type="button" data-dia="${d}" aria-pressed="${!!mio}" aria-label="${esc(fmtLargo(d))}">
         <span class="cu">${esc(dia3(d))}<small>${Number(d.slice(8))}</small></span>
         <span class="qu">${nombres || `<span class="nadie">—</span>`}</span>
         <span class="co">${q.length || ""}</span><span class="ck">${mio ? siglas(mio.tipo) : ""}</span></button>`;
     }).join("");
     return `<div class="grupo"><div class="grupo-cab"><span>${esc(fmtRango(g.dias[0]))} – ${esc(fmtRango(g.dias.at(-1)))}</span>
-      <button class="enlace" type="button" data-tanda="${g.dias.join(",")}" data-quitar="${todos}">${todos ? "Quitar todos" : `Marcar todos ${TIPOS[estado.tipo].siglas}`}</button></div>${filas}</div>`;
+      ${estado.tipo ? `<button class="enlace" type="button" data-tanda="${g.dias.join(",")}" data-quitar="${todos}">${todos ? "Quitar todos" : `Marcar todos ${TIPOS[estado.tipo].siglas}`}</button>` : ""}</div>${filas}</div>`;
   }).join("") || `<p class="vacio">Este mes no hay días de trabajo.</p>`;
 }
 
@@ -472,7 +476,7 @@ $("mes-ant").onclick = () => moverMes(-1);
 $("mes-sig").onclick = () => moverMes(1);
 
 for (const b of document.querySelectorAll("[data-tipo]")) {
-  b.onclick = () => { estado.tipo = b.dataset.tipo; guardar("vacaciones.tipo", estado.tipo); pintar(); };
+  b.onclick = () => { estado.tipo = b.dataset.tipo || null; pintar(); };
 }
 
 for (const b of document.querySelectorAll("[data-vista]")) {
@@ -495,11 +499,12 @@ $("cuenta").addEventListener("click", async (ev) => {
     if (btnSel || btnDia) {
       const dia = (btnSel ?? btnDia).dataset.sel ?? btnDia.dataset.dia;
       if (btnSel) estado.sel = dia;
-      if (mios.get(dia) === tipo) await deleteDoc(refDia(dia));
+      if (!tipo) pintar(); // modo «Ver»: solo se mira
+      else if (mios.get(dia) === tipo) await deleteDoc(refDia(dia));
       else await setDoc(refDia(dia), { uid, dia, tipo });
     } else if (btnFuera) {
       await deleteDoc(refDia(btnFuera.dataset.fuera));
-    } else if (btnTanda) {
+    } else if (btnTanda && tipo) {
       const lote = writeBatch(db);
       const quitar = btnTanda.dataset.quitar === "true";
       for (const dia of btnTanda.dataset.tanda.split(",")) {

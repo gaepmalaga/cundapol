@@ -394,6 +394,7 @@ dialog .nota { margin-bottom: 16px; }
 .recuento .num { font: 700 28px var(--serif); font-variant-numeric: tabular-nums lining-nums; }
 
 /* Tipos de día */
+.t-ver { --c: var(--tinta); }
 .t-vac { --c: #b86f0a; }
 .t-ss { --c: #7a4fb5; }
 .t-nav { --c: #26784c; }
@@ -405,6 +406,8 @@ dialog .nota { margin-bottom: 16px; }
 .tipos { margin-bottom: 16px; }
 .tipos-tit { margin: 0 0 8px; font-size: 13px; color: var(--tenue); text-align: center; }
 .tipos-bot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tipos-bot .t-ver { grid-column: 1 / -1; justify-content: center; }
+.tipos-bot .t-ver[aria-pressed="true"] { color: var(--papel); }
 .tipos-bot button {
   display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 9px 11px;
   font: 600 14px var(--sans); color: var(--tinta); background: transparent;
