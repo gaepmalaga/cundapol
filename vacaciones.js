@@ -44,7 +44,7 @@ const estado = {
   user: null, perfil: { nombre: null },
   turnos: [], turnosListos: false,
   tid: null, turno: null, miembros: [], dias: [], mes: null, sel: null,
-  vista: "mes", modo: "ver", tipo: "vac",
+  vista: "mes", herramienta: null,
   modoAlta: false, autoAbrir: false, saliendo: false,
 };
 let dejarDeEscucharTurnos = null;
@@ -67,9 +67,8 @@ const fechaValida = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && aISO(aFecha(s)) === 
 const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 estado.vista = leer("vacaciones.vista") === "lista" ? "lista" : "mes";
-// Modo «ver»: tocar un día solo lo selecciona. Modo «marcar»: marca con el tipo elegido. Siempre se
-// abre en «ver» para no marcar nada sin querer.
-const tipoActivo = () => (estado.modo === "marcar" ? estado.tipo : null);
+// La herramienta de la paleta: null (solo mirar), un tipo de día (pintar con él) o "borrar".
+// Siempre se abre sin nada elegido para no marcar sin querer.
 
 function nuevoCodigo() {
   const b = crypto.getRandomValues(new Uint8Array(12));
@@ -371,12 +370,16 @@ function pintar() {
   $("vista-mes").hidden = estado.vista !== "mes";
   $("vista-lista").hidden = estado.vista !== "lista";
 
-  for (const b of document.querySelectorAll("[data-modo]")) b.setAttribute("aria-pressed", String(b.dataset.modo === estado.modo));
-  for (const b of document.querySelectorAll("[data-tipo]")) b.setAttribute("aria-pressed", String(b.dataset.tipo === estado.tipo));
-  $("tipos").hidden = estado.modo !== "marcar";
-  $("modo-nota").textContent = estado.modo === "marcar"
-    ? `Cada día que toques se marca como ${TIPOS[estado.tipo].nombre}. Si ya lo tenías así, se quita.`
-    : "Toca un día para ver quién lo ha pedido.";
+  const h = estado.herramienta;
+  for (const b of document.querySelectorAll("[data-herr]")) b.setAttribute("aria-pressed", String(b.dataset.herr === h));
+  const banda = $("banda");
+  banda.className = `banda${h ? "" : " neutra"}`;
+  banda.style.setProperty("--c", h === "borrar" ? "#a3261a" : h ? `var(--c-${h})` : "");
+  banda.innerHTML = h === "borrar"
+    ? `<b>Borrando</b><span>Toca tus días para quitarlos. Toca «Borrar» otra vez para soltar.</span>`
+    : h
+      ? `<b>Pintando ${esc(TIPOS[h].nombre)}</b><span>Toca los días para marcarlos; si ya lo son, se quitan. Toca ${TIPOS[h].siglas} otra vez para soltar.</span>`
+      : `<span>Toca un día para ver quién lo ha pedido, o elige un tipo para pintar.</span>`;
 
   const pedidos = new Map(); // día → [{ u, tipo }]
   for (const d of dias) {
@@ -422,7 +425,6 @@ function pintar() {
 
 // Calendario del mes: cada día de trabajo se oscurece cuanta más gente lo pide.
 function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid }) {
-  const max = Math.max(1, ...laborables.map((d) => quienes(d).length));
   const primero = (new Date(y, m, 1).getDay() + 6) % 7; // lunes primero
   let celdas = "";
   for (let i = 0; i < primero; i++) celdas += `<div class="cel vacia"></div>`;
@@ -431,22 +433,20 @@ function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid }
     const clases = `${d < hoy ? " pasado" : ""}${d === hoy ? " hoy-cel" : ""}`;
     if (!laborables.includes(d)) { celdas += `<div class="cel${clases}"><span class="d">${n}</span></div>`; continue; }
     const cuantos = quienes(d).length;
-    const t = cuantos / max;
     const mio = pedidos.get(d)?.find((x) => x.u === uid);
-    celdas += `<button class="cel trab${clases}${mio ? " mio" : ""}${t > 0.55 ? " fuerte" : ""}${estado.sel === d ? " sel" : ""}" type="button" data-sel="${d}"
-      style="background: color-mix(in srgb, var(--marca) ${Math.round(cuantos ? 12 + t * 80 : 0)}%, var(--papel-2)); ${t > 0.55 ? "color: #fff" : ""}"
-      aria-label="${esc(fmtLargo(d))}, ${cuantos} ${cuantos === 1 ? "persona" : "personas"}"><span class="d">${n}</span><span class="n">${cuantos || ""}</span>${mio ? siglas(mio.tipo) : ""}</button>`;
+    const otros = cuantos - (mio ? 1 : 0);
+    // Un día tuyo se pinta con el color de su tipo; el número pequeño son los demás que también lo piden.
+    celdas += `<button class="cel trab${clases}${mio ? ` mio t-${mio.tipo}` : ""}${estado.sel === d ? " sel" : ""}" type="button" data-sel="${d}"
+      aria-label="${esc(fmtLargo(d))}, ${cuantos} ${cuantos === 1 ? "persona" : "personas"}"><span class="d">${n}</span>${
+      mio ? `<span class="sg2">${TIPOS[mio.tipo].siglas}</span>${otros ? `<span class="ot">+${otros}</span>` : ""}` : `<span class="n">${cuantos || ""}</span>`}</button>`;
   }
   $("rejilla").innerHTML = celdas;
-  $("leyenda-max").textContent = `Muchos (${max})`;
 
   const d = estado.sel;
-  if (!d) { $("detalle").innerHTML = `<p class="nota">Toca un día para marcarlo y ver quién más lo ha pedido.</p>`; return; }
+  if (!d) { $("detalle").innerHTML = `<p class="nota">Toca un día para ver quién lo ha pedido.</p>`; return; }
   const q = quienes(d);
-  const mio = q.some((x) => x.u === uid);
   $("detalle").innerHTML = `<h4>${esc(fmtLargo(d))}<small>${q.length} ${q.length === 1 ? "persona" : "personas"}</small></h4>
-    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)} ${siglas(x.tipo)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>
-    ${mio ? `<button class="btn-yo quitar" type="button" data-fuera="${d}">Quitar mi día</button>` : ""}`;
+    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)} ${siglas(x.tipo)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>`;
 }
 
 // Lista del mes: un día por línea, agrupados por tanda de trabajo.
@@ -458,8 +458,8 @@ function pintarLista({ laborables, hoy, quienes, pedidos, uid }) {
     grupos.at(-1).dias.push(d);
   }
   $("dias").innerHTML = grupos.map((g) => {
-    const activo = tipoActivo();
-    const todos = !!activo && g.dias.every((d) => pedidos.get(d)?.some((x) => x.u === uid && x.tipo === activo));
+    const activo = estado.herramienta;
+    const todos = activo === "borrar" || (!!activo && g.dias.every((d) => pedidos.get(d)?.some((x) => x.u === uid && x.tipo === activo)));
     const filas = g.dias.map((d) => {
       const q = quienes(d);
       const mio = q.find((x) => x.u === uid);
@@ -481,12 +481,9 @@ function moverMes(delta) {
 $("mes-ant").onclick = () => moverMes(-1);
 $("mes-sig").onclick = () => moverMes(1);
 
-for (const b of document.querySelectorAll("[data-tipo]")) {
-  b.onclick = () => { estado.tipo = b.dataset.tipo; pintar(); };
-}
-
-for (const b of document.querySelectorAll("[data-modo]")) {
-  b.onclick = () => { estado.modo = b.dataset.modo; pintar(); };
+// Tocar la herramienta elegida la suelta.
+for (const b of document.querySelectorAll("[data-herr]")) {
+  b.onclick = () => { estado.herramienta = estado.herramienta === b.dataset.herr ? null : b.dataset.herr; pintar(); };
 }
 
 for (const b of document.querySelectorAll("[data-vista]")) {
@@ -498,28 +495,26 @@ const refDia = (dia) => doc(db, "turnos", estado.tid, "dias", idDia(estado.user.
 
 $("cuenta").addEventListener("click", async (ev) => {
   const uid = estado.user.uid;
-  const tipo = tipoActivo();
+  const h = estado.herramienta;
   const mios = new Map(estado.dias.filter((d) => d.uid === uid).map((d) => [d.dia, tipoDe(d)]));
   const btnSel = ev.target.closest("button[data-sel]");
   const btnDia = ev.target.closest("button[data-dia]");
-  const btnFuera = ev.target.closest("button[data-fuera]");
   const btnTanda = ev.target.closest("button[data-tanda]");
   try {
-    // Con un tipo elegido, tocar un día lo marca con él; si ya lo tenías con ese tipo, lo quita.
+    // Sin herramienta solo se mira. Con un tipo, el día se pinta (o se quita si ya era de ese tipo); con «borrar», se quita.
     if (btnSel || btnDia) {
-      const dia = (btnSel ?? btnDia).dataset.sel ?? btnDia.dataset.dia;
+      const dia = btnSel ? btnSel.dataset.sel : btnDia.dataset.dia;
       if (btnSel) estado.sel = dia;
-      if (!tipo) pintar(); // modo «Ver»: solo se mira
-      else if (mios.get(dia) === tipo) await deleteDoc(refDia(dia));
-      else await setDoc(refDia(dia), { uid, dia, tipo });
-    } else if (btnFuera) {
-      await deleteDoc(refDia(btnFuera.dataset.fuera));
-    } else if (btnTanda && tipo) {
+      if (!h) pintar();
+      else if (h === "borrar") { if (mios.has(dia)) await deleteDoc(refDia(dia)); }
+      else if (mios.get(dia) === h) await deleteDoc(refDia(dia));
+      else await setDoc(refDia(dia), { uid, dia, tipo: h });
+    } else if (btnTanda && h) {
       const lote = writeBatch(db);
-      const quitar = btnTanda.dataset.quitar === "true";
+      const quitar = h === "borrar" || btnTanda.dataset.quitar === "true";
       for (const dia of btnTanda.dataset.tanda.split(",")) {
-        if (quitar) lote.delete(refDia(dia));
-        else if (mios.get(dia) !== tipo) lote.set(refDia(dia), { uid, dia, tipo });
+        if (quitar) { if (mios.has(dia)) lote.delete(refDia(dia)); }
+        else if (mios.get(dia) !== h) lote.set(refDia(dia), { uid, dia, tipo: h });
       }
       await lote.commit();
     }

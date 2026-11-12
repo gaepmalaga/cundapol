@@ -104,31 +104,25 @@
     <button type="button" data-vista="lista" aria-pressed="false">Lista</button>
   </div>
 
-  <div class="marcar">
-    <div class="modo" role="group" aria-label="Qué quieres hacer">
-      <button type="button" data-modo="ver" aria-pressed="true">Ver</button>
-      <button type="button" data-modo="marcar" aria-pressed="false">Marcar días</button>
-    </div>
-    <div id="tipos" class="tipos" role="group" aria-label="Tipo de día" hidden>
-      <button type="button" data-tipo="vac" class="t-vac" aria-pressed="true"><span class="tn">Vacaciones</span><i>VAC</i></button>
-      <button type="button" data-tipo="ss" class="t-ss" aria-pressed="false"><span class="tn">Semana Santa</span><i>SS</i></button>
-      <button type="button" data-tipo="nav" class="t-nav" aria-pressed="false"><span class="tn">Navidad</span><i>NAV</i></button>
-      <button type="button" data-tipo="ap" class="t-ap" aria-pressed="false"><span class="tn">Asuntos propios</span><i>AP</i></button>
-    </div>
-    <p class="modo-nota" id="modo-nota"></p>
+  <div class="paleta" role="group" aria-label="Qué marcar">
+    <button type="button" data-herr="vac" class="pc t-vac" aria-pressed="false"><b>VAC</b><small>Vacaciones</small></button>
+    <button type="button" data-herr="ss" class="pc t-ss" aria-pressed="false"><b>SS</b><small>Semana Santa</small></button>
+    <button type="button" data-herr="nav" class="pc t-nav" aria-pressed="false"><b>NAV</b><small>Navidad</small></button>
+    <button type="button" data-herr="ap" class="pc t-ap" aria-pressed="false"><b>AP</b><small>Asuntos propios</small></button>
+    <button type="button" data-herr="borrar" class="pc borrar" aria-pressed="false"><b>⌫</b><small>Borrar</small></button>
   </div>
+  <div id="banda" class="banda neutra"></div>
 
   <div id="vista-mes">
     <div class="sem" aria-hidden="true"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
     <div id="rejilla" class="rej"></div>
     <div id="detalle" class="det"></div>
-    <div class="leyenda" aria-hidden="true"><span>Pocos</span><i class="l1"></i><i class="l2"></i><i class="l3"></i><span id="leyenda-max">Muchos</span></div>
-    <p class="nota nota-mes">Gris: días de descanso. Tus días llevan sus siglas. Con un tipo elegido, tocar otra vez un día tuyo del mismo tipo lo quita. Los días ya pasados quedan de historial.</p>
+    <p class="nota nota-mes">Gris: días de descanso. Tus días se pintan con su color; el «+1» son los demás que también lo piden. Los días ya pasados quedan de historial.</p>
   </div>
 
   <div id="vista-lista" hidden>
     <div id="dias"></div>
-    <p class="nota nota-mes">Con un tipo elegido, toca una línea para marcar ese día. Solo salen los días de trabajo.</p>
+    <p class="nota nota-mes">Elige un tipo y toca una línea para marcar ese día. Solo salen los días de trabajo.</p>
   </div>
 
   <h2 class="subtitulo">Recuento <span id="rec-anio"></span></h2>
