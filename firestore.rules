@@ -103,7 +103,10 @@ service cloud.firestore {
     // y los días que cada uno quiere librar. Aparte de las cundas.
     function turno(tid) { return get(/databases/$(database)/documents/turnos/$(tid)).data; }
     function esDelTurno(tid) { return entrado() && request.auth.uid in turno(tid).uids; }
-    function esAdminTurno(tid) { return entrado() && turno(tid).admin == request.auth.uid; }
+    // Admins de un turno: el campo "admin" (el primero, y el único en la versión vieja) más la lista "admins".
+    function adminsDe(t) { return [t.admin].toSet().union(t.get("admins", []).toSet()); }
+    function esAdminDe(t) { return entrado() && request.auth.uid in adminsDe(t); }
+    function esAdminTurno(tid) { return esAdminDe(turno(tid)); }
     function tipoValido(d) { return !("tipo" in d) || d.tipo in ["vac", "ss", "nav", "ap"]; }
     function fechaValida(f) { return f is string && f.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"); }
 
@@ -118,16 +121,18 @@ service cloud.firestore {
         && request.resource.data.codigo is string && request.resource.data.codigo.size() >= 12;
 
       allow update:
-        // El admin cambia lo que quiera (nombre, arranque, gente, enlace) y puede pasar el turno
-        // a otro de dentro; el turno nunca se queda con un admin que no esté en él.
-        if (entrado() && resource.data.admin == request.auth.uid
-          && (request.resource.data.admin == resource.data.admin || request.resource.data.admin in resource.data.uids)
+        // Un admin cambia lo que quiera (nombre, arranque, gente, enlace) y puede nombrar a otros admins.
+        // Nadie le quita el permiso a otro admin: solo se puede quitar uno el suyo (por ejemplo, al salirse),
+        // y siempre queda alguien, porque el campo "admin" tiene que seguir siendo de uno de dentro.
+        if (esAdminDe(resource.data)
           && request.resource.data.admin in request.resource.data.uids
+          && request.resource.data.uids.toSet().hasAll(adminsDe(request.resource.data))
+          && adminsDe(request.resource.data).hasAll(adminsDe(resource.data).difference([request.auth.uid].toSet()))
           && nombreValido(request.resource.data.nombre)
           && fechaValida(request.resource.data.inicio))
-        // Salirse: solo se quita uno mismo, y el admin no (antes tiene que pasarlo).
+        // Salirse siendo uno más: solo se quita uno mismo. Quien es admin se sale por la regla de arriba.
         || (entrado() && request.auth.uid in resource.data.uids
-          && resource.data.admin != request.auth.uid
+          && !esAdminDe(resource.data)
           && cambia(["uids"])
           && request.resource.data.uids.toSet() == resource.data.uids.toSet().difference([request.auth.uid].toSet()))
         // Unirse con el enlace: solo se añade uno mismo y hay que traer el código bueno.
