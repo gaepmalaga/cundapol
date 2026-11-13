@@ -19,11 +19,13 @@ Todo en español: interfaz, nombres de variables y funciones, comentarios y mens
 - `viajes/{id}` (en la raíz): la colección de antes del multiusuario. Ver «Pendiente».
 
 - **Vacapol** (las vacaciones; aparte de Kundapol, con su logo `vacapol.svg` y PNG `vacapol-*.png`, en `vacaciones.html` + `vacaciones.js`, con su `vacaciones.webmanifest`; mismo Firebase, mismo `style.css` y mismo `sw.js`):
-  - `turnos/{tid}`: `nombre`, `inicio` (AAAA-MM-DD, primer día de trabajo de una tanda), `admin` (uid), `uids`, `codigo`, `invitacion`.
+  - `turnos/{tid}`: `nombre`, `inicio` (AAAA-MM-DD, primer día de trabajo de una tanda), `admin` (uid del primero), `admins` (lista de uids de los demás admins; opcional), `uids`, `codigo`, `invitacion`.
     - `miembros/{uid}`: `nombre` (el de `perfiles`).
-    - `dias/{uid}_{día}`: `uid`, `dia`. Cada uno apunta y quita solo los suyos (el admin también quita).
+    - `dias/{uid}_{día}`: `uid`, `dia`, `tipo` (`vac`/`ss`/`nav`/`ap`; sin `tipo` cuenta como `vac`). Cada uno apunta, cambia de tipo y quita solo los suyos (los admins también quitan).
   - Se trabajan 6 días y se libran 6 desde `inicio`; la app calcula qué días son de trabajo y solo deja marcar esos. Sin máximo de gente por día. Recuento por persona y año. Dos vistas, «Mes» (calendario con mapa de calor y detalle del día) y «Lista» (un día por línea, por tandas); la elegida se recuerda. Los días pasados se ven atenuados como historial y siguen siendo editables.
-  - Mismo funcionamiento que las cundas: crea el admin, enlace `#unirse=<tid>.<codigo>`, echar, pasar el turno, salirse.
+  - Mismo funcionamiento que las cundas: crea el admin, enlace `#unirse=<tid>.<codigo>`, echar y salirse.
+  - **Varios admins:** son el campo `admin` más la lista `admins`. Un admin puede hacer admin a otro de dentro, pero solo se añaden: nadie le quita el permiso a otro (ni lo echa); cada uno puede quitarse el suyo al salirse, siempre que quede otro. Quien se sale siendo el campo `admin` lo pasa a otro admin. No hay «pasar el turno».
+  - Los tipos de día se eligen en una paleta (VAC, SS, NAV, AP y Borrar); sin nada elegido, tocar un día solo lo selecciona. El recuento lo ve cada uno solo de sí mismo; los admins ven el de todos.
 
 ## Funcionamiento
 

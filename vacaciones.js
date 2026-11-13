@@ -255,7 +255,7 @@ function pintarTurnos() {
   $("sin-turnos").hidden = !estado.turnosListos || estado.turnos.length > 0;
   $("lista-turnos").innerHTML = estado.turnos
     .map((t) => `<li><button type="button" data-id="${esc(t.id)}">${esc(t.nombre)}${
-      t.admin === estado.user?.uid ? `<span class="admin">lo llevas tú</span>` : ""}</button></li>`)
+      adminsDe(t).has(estado.user?.uid) ? `<span class="admin">admin</span>` : ""}</button></li>`)
     .join("");
 }
 
@@ -291,7 +291,10 @@ $("form-crear").onsubmit = async (ev) => {
 
 /* ---------- un turno ---------- */
 
-const soyAdmin = () => estado.turno?.admin === estado.user?.uid;
+// Los admins son el campo "admin" (el primero) más la lista "admins". Solo se añaden; nadie le quita
+// el permiso a otro, y cada uno puede quitarse el suyo al salirse.
+const adminsDe = (t) => new Set([t?.admin, ...(t?.admins ?? [])].filter(Boolean));
+const soyAdmin = () => adminsDe(estado.turno).has(estado.user?.uid);
 
 function dejarTurno() {
   for (const f of dejarDeEscucharTurno) f();
@@ -561,18 +564,23 @@ function pintarGente() {
     $("gente-nombre").value = estado.turno?.nombre ?? "";
     $("gente-inicio").value = estado.turno?.inicio ?? "";
   }
+  const admins = adminsDe(estado.turno);
   $("gente-lista").innerHTML = [...estado.miembros].sort(porNombre).map((m) => {
-    const etiqueta = m.id === estado.turno?.admin ? "lo lleva" : m.id === yo ? "tú" : "";
-    const botones = admin && m.id !== yo
-      ? `<button class="enlace" type="button" data-accion="admin" data-id="${esc(m.id)}">pasarle el turno</button>
+    const etiquetas = [admins.has(m.id) ? "admin" : "", m.id === yo ? "tú" : ""].filter(Boolean).join(" · ");
+    // Un admin puede hacer admin a quien no lo es y echarlo; a otro admin no se le toca.
+    const botones = admin && !admins.has(m.id)
+      ? `<button class="enlace" type="button" data-accion="admin" data-id="${esc(m.id)}">hacer admin</button>
          <button class="enlace" type="button" data-accion="echar" data-id="${esc(m.id)}">echar</button>`
       : "";
-    return `<li><span class="nom">${esc(m.nombre)}${etiqueta ? `<span class="dif">${etiqueta}</span>` : ""}</span><span class="acciones-gente">${botones}</span></li>`;
+    return `<li><span class="nom">${esc(m.nombre)}${etiquetas ? `<span class="dif">${etiquetas}</span>` : ""}</span><span class="acciones-gente">${botones}</span></li>`;
   }).join("");
-  $("btn-salir-turno").hidden = admin;
-  $("gente-nota").textContent = admin
-    ? "Para salirte, pásale antes el turno a otra persona."
-    : "Si sales, tus días dejan de contar. Puedes volver con el enlace.";
+  const puedeSalir = !admin || [...admins].some((u) => u !== yo && estado.miembros.some((m) => m.id === u));
+  $("btn-salir-turno").hidden = !puedeSalir;
+  $("gente-nota").textContent = !admin
+    ? "Si sales, tus días dejan de contar. Puedes volver con el enlace."
+    : puedeSalir
+      ? "Puedes salirte mientras quede otro admin. Un admin no puede quitarle el permiso a otro."
+      : "Para salirte, nombra antes a otro admin.";
 }
 
 $("btn-gente-guardar").onclick = async () => {
@@ -590,9 +598,9 @@ $("gente-lista").onclick = async (ev) => {
   const ref = doc(db, "turnos", estado.tid);
   try {
     if (btn.dataset.accion === "admin") {
-      if (!confirm(`${m.nombre} llevará el turno y tú pasarás a ser uno más. ¿Seguimos?`)) return;
-      await updateDoc(ref, { admin: m.id });
-      aviso(`Ahora lo lleva ${m.nombre}`);
+      if (!confirm(`¿Hacer admin a ${m.nombre}? Podrá cambiar el turno, echar gente y ver el recuento de todos, y nadie podrá quitarle el permiso.`)) return;
+      await updateDoc(ref, { admins: arrayUnion(m.id) });
+      aviso(`${m.nombre} ya es admin`);
     } else {
       if (!confirm(`¿Echar a ${m.nombre}? Deja de salir en el calendario. El enlace de invitación cambia para que no pueda volver con el viejo.`)) return;
       const lote = writeBatch(db);
@@ -610,9 +618,16 @@ $("btn-salir-turno").onclick = async () => {
   if (!confirm(`¿Salir de «${nombre}»? Para volver necesitarás el enlace.`)) return;
   const ref = doc(db, "turnos", estado.tid);
   try {
+    const yo = estado.user.uid;
     const lote = writeBatch(db);
-    lote.delete(doc(ref, "miembros", estado.user.uid));
-    lote.update(ref, { uids: arrayRemove(estado.user.uid) });
+    lote.delete(doc(ref, "miembros", yo));
+    const cambios = { uids: arrayRemove(yo) };
+    if (soyAdmin()) {
+      // Un admin se sale quitándose también de la lista; si era el primero, el campo «admin» pasa a otro admin.
+      cambios.admins = arrayRemove(yo);
+      if (estado.turno.admin === yo) cambios.admin = [...adminsDe(estado.turno)].find((u) => u !== yo);
+    }
+    lote.update(ref, cambios);
     estado.saliendo = true; // sin reactivar la ficha ni avisar como si te hubieran echado
     await lote.commit();
     $("dlg-gente").close();
