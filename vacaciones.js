@@ -44,7 +44,7 @@ const estado = {
   user: null, perfil: { nombre: null },
   turnos: [], turnosListos: false,
   tid: null, turno: null, miembros: [], dias: [], mes: null, sel: null,
-  vista: "mes", herramienta: null,
+  vista: "mes", herramienta: null, orden: "az", cerosAbiertos: false,
   modoAlta: false, autoAbrir: false, saliendo: false,
 };
 let dejarDeEscucharTurnos = null;
@@ -67,6 +67,7 @@ const fechaValida = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && aISO(aFecha(s)) === 
 const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const guardar = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
 estado.vista = leer("vacaciones.vista") === "lista" ? "lista" : "mes";
+estado.orden = leer("vacaciones.orden") === "mas" ? "mas" : "az";
 // La herramienta de la paleta: null (solo mirar), un tipo de día (pintar con él) o "borrar".
 // Siempre se abre sin nada elegido para no marcar sin querer.
 
@@ -409,18 +410,34 @@ function pintar() {
     c.n++;
     c.tipos[tipoDe(d)] = (c.tipos[tipoDe(d)] ?? 0) + 1;
   }
-  const admin = soyAdmin();
-  $("recuento").innerHTML = [...cuentas]
-    .filter(([u]) => admin || u === uid)
-    .map(([u, c]) => ({ u, nombre: gente.get(u), ...c }))
-    .sort(porNombre)
-    .map((p) => {
-      const desglose = Object.keys(TIPOS).filter((t) => p.tipos[t]).map((t) => `${siglas(t)} ${p.tipos[t]}`).join(" ");
-      return `<li><span class="nom">${esc(p.nombre)}${p.u === uid ? `<span class="dif">tú</span>` : ""}${desglose ? `<span class="dif desglose">${desglose}</span>` : ""}</span><span class="num">${p.n}</span></li>`;
-    })
-    .join("");
+  pintarRecuento(cuentas, gente, uid);
 
   if ($("dlg-gente").open) pintarGente();
+}
+
+// Recuento del año. Cada uno ve el suyo; el admin ve el de todos, con los que no han pedido nada
+// plegados al final y la opción de ordenar por nombre o por días.
+function pintarRecuento(cuentas, gente, uid) {
+  const admin = soyAdmin();
+  $("rec-gente").textContent = `${gente.size} ${gente.size === 1 ? "persona" : "personas"} en el turno`;
+  $("rec-orden").hidden = !admin;
+  for (const b of document.querySelectorAll("[data-orden]")) b.setAttribute("aria-pressed", String(b.dataset.orden === estado.orden));
+
+  const filas = [...cuentas]
+    .filter(([u]) => admin || u === uid)
+    .map(([u, c]) => ({ u, nombre: gente.get(u), ...c }))
+    .sort(estado.orden === "mas" ? (a, b) => b.n - a.n || porNombre(a, b) : porNombre);
+  const fila = (p) => {
+    const tipos = Object.keys(TIPOS).filter((t) => p.tipos[t]).map((t) => `<span>${siglas(t)}${p.tipos[t]}</span>`).join("");
+    return `<li class="${p.n ? "" : "cero"}"><span class="nom">${esc(p.nombre)}${p.u === uid ? `<span class="dif">tú</span>` : ""}</span>${tipos ? `<span class="tipos-rec">${tipos}</span>` : ""}<span class="num">${p.n}</span></li>`;
+  };
+  // Un no admin solo tiene su fila: se enseña siempre, aunque sea 0.
+  const con = admin ? filas.filter((p) => p.n) : filas;
+  const sin = admin ? filas.filter((p) => !p.n) : [];
+  $("recuento").innerHTML = con.map(fila).join("")
+    + (sin.length
+      ? `<li class="plegable"><button type="button" class="rec-ceros" id="btn-ceros" aria-expanded="${estado.cerosAbiertos}">${estado.cerosAbiertos ? "▾" : "▸"} Sin días pedidos (${sin.length})</button></li>${estado.cerosAbiertos ? sin.map(fila).join("") : ""}`
+      : "");
 }
 
 // Calendario del mes: cada día de trabajo se oscurece cuanta más gente lo pide.
@@ -480,6 +497,13 @@ function moverMes(delta) {
 }
 $("mes-ant").onclick = () => moverMes(-1);
 $("mes-sig").onclick = () => moverMes(1);
+
+for (const b of document.querySelectorAll("[data-orden]")) {
+  b.onclick = () => { estado.orden = b.dataset.orden; guardar("vacaciones.orden", estado.orden); pintar(); };
+}
+$("recuento").addEventListener("click", (ev) => {
+  if (ev.target.closest("#btn-ceros")) { estado.cerosAbiertos = !estado.cerosAbiertos; pintar(); }
+});
 
 // Tocar la herramienta elegida la suelta.
 for (const b of document.querySelectorAll("[data-herr]")) {
