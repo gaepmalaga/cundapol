@@ -26,6 +26,7 @@ const TIPOS = {
   ss: { nombre: "Semana Santa", siglas: "SS" },
   nav: { nombre: "Navidad", siglas: "NAV" },
   ap: { nombre: "Asuntos propios", siglas: "AP" },
+  otros: { nombre: "Otros", siglas: "OTR" },
 };
 const tipoDe = (d) => (TIPOS[d.tipo] ? d.tipo : "vac");
 const siglas = (t) => `<i class="sg t-${t}" title="${TIPOS[t].nombre}">${TIPOS[t].siglas}</i>`;
