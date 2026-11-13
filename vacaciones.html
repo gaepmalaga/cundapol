@@ -125,7 +125,14 @@
     <p class="nota nota-mes">Elige un tipo y toca una línea para marcar ese día. Solo salen los días de trabajo.</p>
   </div>
 
-  <h2 class="subtitulo">Recuento <span id="rec-anio"></span></h2>
+  <div class="rec-cab">
+    <h2 class="subtitulo">Recuento <span id="rec-anio"></span></h2>
+    <span class="rec-gente" id="rec-gente"></span>
+  </div>
+  <div class="rec-orden" id="rec-orden" role="group" aria-label="Ordenar" hidden>
+    <button type="button" data-orden="az" aria-pressed="true">A–Z</button>
+    <button type="button" data-orden="mas" aria-pressed="false">Más días</button>
+  </div>
   <ul id="recuento" class="recuento"></ul>
   <p class="version"></p>
 </section>
