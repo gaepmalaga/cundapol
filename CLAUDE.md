@@ -6,7 +6,8 @@ Todo en español: interfaz, nombres de variables y funciones, comentarios y mens
 ## Cómo está hecha
 
 - Web estática sin build: `index.html`, `style.css`, `app.js` (módulo ES), `sw.js`, `version.js`.
-- Firebase (proyecto `cundapol`) cargado desde el CDN de gstatic (10.14.1): Auth (Google y correo) y Firestore con caché persistente.
+- Firebase (proyecto `cundapol`) cargado desde el CDN de gstatic (10.14.1): Auth (Google, correo o usuario) y Firestore con caché persistente.
+- **Entrar con usuario:** quien no quiere dar su correo pone un usuario sin `@`; por dentro es `usuario@usuario.invalid` (un correo que no existe), así que esas cuentas **no pueden recuperar la contraseña**. «He olvidado mi contraseña» manda el correo de Firebase (en español) solo a quien se registró con correo real. Mismo código en `app.js` y `vacaciones.js`.
 - Se publica en GitHub Pages desde `main`: https://gaepmalaga.github.io/cundapol/ (tarda 1-2 min tras fusionar).
 - PWA instalable. El service worker (`sw.js`) va primero a la red para lo propio y tira de caché sin cobertura.
 
