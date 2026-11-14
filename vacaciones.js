@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
-  signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
@@ -36,6 +36,7 @@ const CICLO = 12;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+auth.languageCode = "es"; // los correos de Firebase (recuperar contraseña) salen en español
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
@@ -114,32 +115,50 @@ const tandaDe = (iso) => Math.floor(numDia(iso) / CICLO);
 /* ---------- entrada ---------- */
 
 const MENSAJES = {
-  "auth/invalid-credential": "Correo o contraseña no válidos.",
-  "auth/wrong-password": "Correo o contraseña no válidos.",
-  "auth/user-not-found": "Correo o contraseña no válidos.",
-  "auth/invalid-email": "Ese correo no parece válido.",
-  "auth/email-already-in-use": "Ese correo ya tiene cuenta. Prueba a entrar.",
+  "auth/invalid-credential": "Usuario, correo o contraseña no válidos.",
+  "auth/wrong-password": "Usuario, correo o contraseña no válidos.",
+  "auth/user-not-found": "Usuario, correo o contraseña no válidos.",
+  "auth/invalid-email": "Ese correo o usuario no parece válido.",
+  "auth/email-already-in-use": "Ese usuario o correo ya tiene cuenta. Prueba a entrar, o elige otro usuario.",
   "auth/weak-password": "La contraseña necesita al menos 6 caracteres.",
   "auth/too-many-requests": "Demasiados intentos. Espera un rato.",
   "auth/network-request-failed": "Sin conexión.",
   "auth/unauthorized-domain": "Este dominio no está autorizado en Firebase.",
 };
-function errorEntrada(e) {
-  if (e?.code === "auth/popup-closed-by-user" || e?.code === "auth/cancelled-popup-request") return;
-  const p = $("error-entrada");
-  p.textContent = MENSAJES[e?.code] ?? "No se ha podido entrar.";
-  p.hidden = false;
+
+// Quien no quiere dar su correo entra con un usuario (sin @). Por dentro es un correo inventado que
+// no existe, así que con usuario no se puede recuperar la contraseña.
+const DOMINIO_USUARIO = "usuario.invalid";
+function aCorreo(texto) {
+  const t = texto.trim();
+  if (t.includes("@")) return t;
+  const usuario = t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, ".");
+  if (!/^[a-z0-9._-]{3,30}$/.test(usuario)) return null;
+  return `${usuario}@${DOMINIO_USUARIO}`;
 }
 
+function mostrarError(texto) {
+  $("info-entrada").hidden = true;
+  const p = $("error-entrada");
+  p.textContent = texto;
+  p.hidden = false;
+}
+function errorEntrada(e) {
+  if (e?.code === "auth/popup-closed-by-user" || e?.code === "auth/cancelled-popup-request") return;
+  mostrarError(MENSAJES[e?.code] ?? "No se ha podido entrar.");
+}
+const limpiarMensajes = () => { $("error-entrada").hidden = true; $("info-entrada").hidden = true; };
+
 $("btn-google").onclick = async () => {
-  $("error-entrada").hidden = true;
+  limpiarMensajes();
   try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { errorEntrada(e); }
 };
 
 $("form-correo").onsubmit = async (ev) => {
   ev.preventDefault();
-  $("error-entrada").hidden = true;
-  const correo = $("correo").value.trim();
+  limpiarMensajes();
+  const correo = aCorreo($("correo").value);
+  if (!correo) return mostrarError("El usuario puede llevar letras, números, punto, guion y guion bajo (de 3 a 30), sin espacios.");
   const clave = $("clave").value;
   try {
     if (estado.modoAlta) await createUserWithEmailAndPassword(auth, correo, clave);
@@ -151,8 +170,27 @@ $("btn-modo").onclick = () => {
   estado.modoAlta = !estado.modoAlta;
   $("btn-correo").textContent = estado.modoAlta ? "Crear cuenta" : "Entrar";
   $("btn-modo").textContent = estado.modoAlta ? "Ya tengo cuenta, entrar" : "No tengo cuenta, crear una";
+  $("btn-olvido").hidden = estado.modoAlta;
   $("clave").autocomplete = estado.modoAlta ? "new-password" : "current-password";
-  $("error-entrada").hidden = true;
+  limpiarMensajes();
+};
+
+$("btn-olvido").onclick = async () => {
+  limpiarMensajes();
+  const texto = $("correo").value.trim();
+  if (!texto) return mostrarError("Escribe arriba tu correo y vuelve a pulsar.");
+  if (!texto.includes("@")) return mostrarError("Con un usuario no se puede recuperar la contraseña, porque no hay un correo al que mandarla. Crea otra cuenta con otro usuario.");
+  const aviso = () => {
+    $("info-entrada").textContent = "Si ese correo tiene cuenta, te llegará un enlace para elegir otra contraseña. Mira también en spam.";
+    $("info-entrada").hidden = false;
+  };
+  try {
+    await sendPasswordResetEmail(auth, texto);
+    aviso();
+  } catch (e) {
+    // Sin cuenta se contesta lo mismo, para no decir qué correos están registrados.
+    if (e?.code === "auth/user-not-found") aviso(); else errorEntrada(e);
+  }
 };
 
 $("btn-salir").onclick = $("btn-salir-2").onclick = () => {
@@ -692,6 +730,9 @@ onAuthStateChanged(auth, async (user) => {
     dejarDeEscucharTurnos = null;
     dejarTurno();
     Object.assign(estado, { perfil: { nombre: null }, turnos: [], tid: null, turno: null, miembros: [], dias: [] });
+    // Al salir, la entrada vuelve a «Entrar» y sin la contraseña de antes.
+    if (estado.modoAlta) $("btn-modo").click();
+    $("clave").value = "";
     mostrar("entrada");
     return;
   }

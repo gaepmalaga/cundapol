@@ -38,18 +38,21 @@
   </div>
 
   <button id="btn-google" class="boton-linea" type="button">Entrar con Google</button>
-  <p class="separador"><span>o con correo</span></p>
+  <p class="separador"><span>o con correo o usuario</span></p>
 
   <form id="form-correo" autocomplete="on">
-    <label>Correo
-      <input id="correo" type="email" autocomplete="email" required>
+    <label>Correo o usuario
+      <input id="correo" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
     </label>
+    <p class="nota nota-usuario">¿No quieres dar tu correo? Pon un usuario cualquiera, sin @. Apunta bien la contraseña: con usuario no se puede recuperar.</p>
     <label>Contraseña
       <input id="clave" type="password" autocomplete="current-password" minlength="6" required>
     </label>
     <p id="error-entrada" class="error" role="alert" hidden></p>
+    <p id="info-entrada" class="nota" role="status" hidden></p>
     <button id="btn-correo" class="boton-solido" type="submit">Entrar</button>
     <button id="btn-modo" class="enlace" type="button">No tengo cuenta, crear una</button>
+    <button id="btn-olvido" class="enlace" type="button">He olvidado mi contraseña</button>
   </form>
 </section>
 

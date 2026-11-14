@@ -448,3 +448,7 @@ dialog .nota { margin-bottom: 16px; }
   display: block; width: 100%; padding: 0; text-align: left; background: none;
   border: 0; font: 500 14px var(--sans); color: var(--tenue); cursor: pointer;
 }
+
+/* Entrada con usuario */
+.nota-usuario { margin: -4px 0 14px; font-size: 13px; line-height: 1.35; }
+#btn-olvido { margin-top: 8px; }
