@@ -1,0 +1,46 @@
+# Herramienta de datos de Vacapol: se lanza SOLO a mano (Actions → Base de datos (a mano) → Run workflow).
+# Usa el secreto FIREBASE_SERVICE_ACCOUNT. Todo lo que imprime con datos de personas va cifrado
+# (ver scripts/bd/bd.mjs), porque en un repositorio público los registros los ve cualquiera.
+name: Base de datos (a mano)
+
+on:
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "exportar = solo lectura; aplicar = apunta los días del plan"
+        type: choice
+        options: [exportar, aplicar]
+        default: exportar
+      confirmar:
+        description: "Para aplicar, escribe SI"
+        default: ""
+      plan:
+        description: "Para aplicar: JSON [{tid, uid, dia, tipo}]"
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency: bd-admin
+
+jobs:
+  bd:
+    # Solo la versión de la rama principal puede usar el secreto.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar
+        run: npm install --prefix scripts/bd --no-audit --no-fund
+      - name: Ejecutar
+        working-directory: scripts/bd
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          ACCION: ${{ inputs.accion }}
+          CONFIRMAR: ${{ inputs.confirmar }}
+          PLAN: ${{ inputs.plan }}
+        run: node bd.mjs "$ACCION" "$CONFIRMAR" "$PLAN"
