@@ -531,3 +531,22 @@ dialog .nota { margin-bottom: 16px; }
 
 .det-ausentes { margin: 12px 0 0; font-size: 13px; }
 .chip.fuera { color: var(--tenue); border-style: dashed; background: transparent; }
+
+/* Cuadrante publicado, en el detalle del día del calendario */
+.bloque-cuad { margin-top: 14px; border-top: 1.5px dashed var(--regla); padding-top: 12px; }
+.bloque-cab { display: flex; align-items: baseline; gap: 6px; font: 500 14px var(--sans); margin-bottom: 8px; }
+.bloque-cab b { font: 800 15px var(--sans); }
+.enlace2 { margin-left: auto; font: 600 13px var(--sans); color: var(--tinta); background: none; border: 0; border-bottom: 1.5px solid var(--regla); cursor: pointer; }
+.mi-puesto { margin: 0 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--marca-suave); font: 600 14px var(--sans); }
+.puestos-det { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font: 500 13.5px var(--sans); margin-bottom: 10px; }
+.puestos-det span { color: var(--tenue); }
+.puestos-det .vacio { color: var(--regla); font-style: normal; }
+.puestos-det b.yo, .mini-gente b.yo { color: var(--marca); }
+.mini { border-left: 5px solid var(--c); background: var(--papel-2); border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; }
+.mini-cab { display: flex; align-items: baseline; gap: 6px; }
+.mini-cab b { color: var(--c); font: 800 13.5px var(--sans); }
+.mini-cab small { font: 500 11.5px var(--sans); color: var(--tenue); }
+.mini-gente { font: 500 13.5px/1.35 var(--sans); margin-top: 2px; }
+.publicar { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.publicar .boton-solido { width: 100%; }
+.publicar .boton-solido:disabled { opacity: .55; }

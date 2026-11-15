@@ -193,6 +193,21 @@ service cloud.firestore {
           && (!("equipos" in request.resource.data) || request.resource.data.equipos is map)
           && (!("movidos" in request.resource.data) || request.resource.data.movidos is map);
       }
+
+      // Cuadrante publicado de un día (id AAAA-MM-DD): lo que el admin decide enseñar a todos en el
+      // calendario (turno, puestos y equipos con los nombres). Lo leen todos los del turno; lo escriben los admins.
+      match /publicados/{dia} {
+        allow read: if esDelTurno(tid);
+        allow create, update: if esAdminTurno(tid)
+          && fechaValida(dia)
+          && request.resource.data.keys().hasOnly(["turno", "puestos", "equipos", "publicado", "por"])
+          && request.resource.data.turno in ["M", "T", "N"]
+          && request.resource.data.puestos is map
+          && request.resource.data.equipos is list && request.resource.data.equipos.size() == 3
+          && request.resource.data.publicado == request.time
+          && request.resource.data.por == request.auth.uid;
+        allow delete: if esAdminTurno(tid);
+      }
     }
 
     // Cada cuenta guarda solo su propio perfil (nombre).
