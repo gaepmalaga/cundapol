@@ -9,6 +9,10 @@ import {
   query, where, arrayUnion, arrayRemove, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { VERSION } from "./version.js";
+import {
+  TURNOS, TAREA_TEXTO, COLOR_EQUIPO, PATRON_POR_DEFECTO, patronValido, horarioTurno, tareaDe, repartir,
+  htmlCuadrante, htmlEquipos, docxCuadrante, docxEquipos, nombreArchivo,
+} from "./cuadrante.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBTC7Im2qfaZodfhH1Qr_Uey4CGEyVw0Yc",
@@ -78,7 +82,7 @@ function nuevoCodigo() {
   return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_");
 }
 
-const PANTALLAS = ["cargando", "entrada", "nombre", "turnos", "cuenta"];
+const PANTALLAS = ["cargando", "entrada", "nombre", "turnos", "cuenta", "cuadrante"];
 function mostrar(pantalla) {
   for (const id of PANTALLAS) $(id).hidden = id !== pantalla;
 }
@@ -338,6 +342,7 @@ const soyAdmin = () => adminsDe(estado.turno).has(estado.user?.uid);
 function dejarTurno() {
   for (const f of dejarDeEscucharTurno) f();
   dejarDeEscucharTurno = [];
+  dejarCuadrante();
 }
 
 function abrirTurno(tid) {
@@ -407,6 +412,7 @@ function pintar() {
   const dias = estado.dias.filter((d) => gente.has(d.uid));
 
   $("turno-nombre").textContent = estado.turno.nombre;
+  $("btn-cuadrante").hidden = $("sep-cuadrante").hidden = !soyAdmin();
   $("soy").textContent = estado.perfil.nombre ?? "";
   $("mes-titulo").textContent = fmtMes(estado.mes);
   for (const b of document.querySelectorAll("[data-vista]")) b.setAttribute("aria-pressed", String(b.dataset.vista === estado.vista));
@@ -455,6 +461,7 @@ function pintar() {
   pintarRecuento(cuentas, gente, uid);
 
   if ($("dlg-gente").open) pintarGente();
+  if (enPantalla("cuadrante")) pintarCuadrante();
 }
 
 // Recuento del año. Cada uno ve el suyo; el admin ve el de todos, con los que no han pedido nada
@@ -708,6 +715,245 @@ $("btn-enlace-nuevo").onclick = async () => {
     $("invitar-enlace").value = enlaceDe({ id: estado.tid, codigo });
     aviso("Enlace nuevo hecho");
   } catch (e) { errorDatos(e); }
+};
+
+/* ---------- cuadrante del día (solo admins) ---------- */
+
+const DOCX_URL = "https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js";
+const cuad = { iso: hoyISO(), doc: {}, dejar: null, listo: false };
+
+const sumarDias = (iso, n) => { const d = aFecha(iso); d.setDate(d.getDate() + n); return aISO(d); };
+
+// Qué toca ese día según la tanda: turno (M/T/N), posición en la tanda y base de la rotación; null si es de descanso.
+function diaDeCuadrante(iso) {
+  const n = numDia(iso);
+  const pos = ((n % CICLO) + CICLO) % CICLO;
+  if (pos >= TRABAJO) return null;
+  const ajustes = estado.turno?.cuadrante ?? {};
+  const patron = patronValido(ajustes.patron) ? ajustes.patron : PATRON_POR_DEFECTO;
+  const rotacion = [0, 1, 2].includes(ajustes.rotacion) ? ajustes.rotacion : 0;
+  return { turno: patron[pos], pos, base: rotacion + pos };
+}
+
+function escucharCuadrante() {
+  cuad.dejar?.();
+  cuad.listo = false;
+  cuad.doc = {};
+  const iso = cuad.iso;
+  cuad.dejar = onSnapshot(doc(db, "turnos", estado.tid, "cuadrantes", iso), (snap) => {
+    if (cuad.iso !== iso) return;
+    cuad.doc = snap.exists() ? snap.data() : {};
+    cuad.listo = true;
+    pintarCuadrante();
+  }, (e) => console.error(e));
+}
+function dejarCuadrante() { cuad.dejar?.(); cuad.dejar = null; }
+
+// Todo lo que depende del día y de quién está: disponibles, puestos, equipos y los datos de los documentos.
+function calcularCuadrante() {
+  const info = diaDeCuadrante(cuad.iso);
+  const libres = new Set(estado.dias.filter((d) => d.dia === cuad.iso).map((d) => d.uid));
+  const gente = estado.miembros.map((m) => ({ id: m.id, nombre: m.nombre }));
+  const disponibles = gente.filter((p) => !libres.has(p.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const libran = gente.filter((p) => libres.has(p.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const dispIds = new Set(disponibles.map((p) => p.id));
+  // Un puesto de alguien que ya no está disponible (por ejemplo, ha marcado ese día después) cuenta como vacío.
+  const puestos = {};
+  for (const k of ["crc", "oav", "delfin"]) puestos[k] = dispIds.has(cuad.doc[k]) ? cuad.doc[k] : null;
+  const movidos = cuad.doc.movidos ?? {};
+  const equipos = info ? repartir(disponibles, puestos, movidos) : [[], [], []];
+  const nombreDe = (id) => gente.find((p) => p.id === id)?.nombre ?? null;
+  return {
+    info, disponibles, libran, puestos, movidos, equipos,
+    datos: info && {
+      turno: info.turno, iso: cuad.iso, base: info.base, equipos: equipos.map((eq) => eq.map((p) => p.nombre)),
+      crc: nombreDe(puestos.crc), oav: nombreDe(puestos.oav), delfin: nombreDe(puestos.delfin),
+    },
+  };
+}
+
+function pintarCuadrante() {
+  if (!estado.turno || !enPantalla("cuadrante")) return;
+  const c = calcularCuadrante();
+  $("cuad-fecha").value = cuad.iso;
+  const banda = $("cuad-turno");
+  $("cuad-cuerpo").hidden = !c.info;
+  if (!c.info) {
+    banda.innerHTML = `<b>Día de descanso</b><small>Este día no se trabaja, así que no hay cuadrante.</small>`;
+  } else {
+    banda.innerHTML = `<b>${TURNOS[c.info.turno].nombre}</b> · ${horarioTurno(c.info.turno)}<small>Trabajan ${c.disponibles.length}${
+      c.libran.length ? ` · libran ${c.libran.length} (${c.libran.map((p) => esc(p.nombre)).join(", ")})` : ""}</small>`;
+    for (const k of ["crc", "oav", "delfin"]) {
+      const otros = new Set(["crc", "oav", "delfin"].filter((x) => x !== k).map((x) => c.puestos[x]).filter(Boolean));
+      $(`cuad-${k}`).innerHTML = `<option value="">${k === "delfin" ? "Sin nombrar" : "Sin elegir"}</option>` + c.disponibles
+        .map((p) => `<option value="${esc(p.id)}"${otros.has(p.id) ? " disabled" : ""}${c.puestos[k] === p.id ? " selected" : ""}>${esc(p.nombre)}</option>`).join("");
+    }
+    $("cuad-equipos").innerHTML = c.equipos.map((eq, e) => `<div class="eqcard" style="--c:#${COLOR_EQUIPO[e]}">
+      <b>Equipo ${e + 1}</b><small>Empieza en ${TAREA_TEXTO[tareaDe(c.info.base, e, 0)].nombre}</small>
+      <div class="chips">${eq.map((p) => `<button class="chip${c.movidos[p.id] ? " movido" : ""}" type="button" data-mover="${esc(p.id)}">${esc(p.nombre)}</button>`).join("") || `<span class="nota">Nadie</span>`}</div></div>`).join("");
+  }
+  // Ajustes (solo si no se está editando alguno ahora mismo)
+  if (!$("cuad-patron").contains(document.activeElement)) {
+    const ajustes = estado.turno.cuadrante ?? {};
+    const patron = patronValido(ajustes.patron) ? ajustes.patron : PATRON_POR_DEFECTO;
+    $("cuad-patron").innerHTML = patron.map((t, i) => `<label>Día ${i + 1}<select data-patron="${i}">${
+      Object.entries(TURNOS).map(([k, v]) => `<option value="${k}"${k === t ? " selected" : ""}>${v.nombre[0] + v.nombre.slice(1).toLowerCase()}</option>`).join("")}</select></label>`).join("");
+    $("cuad-rotacion").value = String([0, 1, 2].includes(ajustes.rotacion) ? ajustes.rotacion : 0);
+  }
+}
+
+function abrirCuadrante() {
+  if (!soyAdmin()) return;
+  if (!cuad.iso) cuad.iso = hoyISO();
+  mostrar("cuadrante");
+  escucharCuadrante();
+  pintarCuadrante();
+}
+function cerrarCuadrante() {
+  dejarCuadrante();
+  mostrar("cuenta");
+  pintar();
+}
+function irADia(iso) {
+  if (!fechaValida(iso)) return;
+  cuad.iso = iso;
+  escucharCuadrante();
+  pintarCuadrante();
+}
+
+$("btn-cuadrante").onclick = abrirCuadrante;
+$("btn-cuad-volver").onclick = cerrarCuadrante;
+$("cuad-ant").onclick = () => irADia(sumarDias(cuad.iso, -1));
+$("cuad-sig").onclick = () => irADia(sumarDias(cuad.iso, 1));
+$("cuad-fecha").onchange = (ev) => irADia(ev.target.value);
+
+// Guarda solo los campos que se dan (el resto del día se queda como está).
+async function guardarCuadrante(parcial) {
+  try {
+    await setDoc(doc(db, "turnos", estado.tid, "cuadrantes", cuad.iso), parcial, { mergeFields: Object.keys(parcial) });
+  } catch (e) { errorDatos(e); }
+}
+
+for (const sel of document.querySelectorAll("[data-puesto]")) {
+  sel.onchange = () => guardarCuadrante({ [sel.dataset.puesto]: sel.value || null });
+}
+
+$("btn-cuad-repetir").onclick = async () => {
+  const c = calcularCuadrante();
+  if (!c.info) return;
+  try {
+    for (let k = 1; k <= 14; k++) {
+      const iso = sumarDias(cuad.iso, -k);
+      const snap = await getDoc(doc(db, "turnos", estado.tid, "cuadrantes", iso));
+      const d = snap.exists() ? snap.data() : null;
+      if (!d || !(d.crc || d.oav || d.delfin)) continue;
+      const dispIds = new Set(c.disponibles.map((p) => p.id));
+      const usados = new Set();
+      const nuevo = {};
+      for (const p of ["crc", "oav", "delfin"]) {
+        const id = d[p];
+        nuevo[p] = id && dispIds.has(id) && !usados.has(id) ? id : null;
+        if (nuevo[p]) usados.add(id);
+      }
+      await guardarCuadrante(nuevo);
+      return aviso(`Puestos de ${fmtRango(iso)}`);
+    }
+    aviso("No hay puestos de los últimos días");
+  } catch (e) { errorDatos(e); }
+};
+
+// Mover a alguien de equipo a mano.
+$("cuad-equipos").onclick = (ev) => {
+  const id = ev.target.closest("button[data-mover]")?.dataset.mover;
+  const m = estado.miembros.find((x) => x.id === id);
+  if (!m) return;
+  const c = calcularCuadrante();
+  const actual = c.equipos.findIndex((eq) => eq.some((p) => p.id === id));
+  $("mover-titulo").textContent = `Mover a ${m.nombre}`;
+  $("mover-botones").innerHTML = [0, 1, 2].map((e) => `<button type="button" class="boton-linea" data-a="${e + 1}"${e === actual ? " disabled" : ""}>Equipo ${e + 1}</button>`).join("")
+    + (c.movidos[id] ? `<button type="button" class="enlace" data-a="0">Quitar el cambio</button>` : "");
+  $("mover-botones").dataset.id = id;
+  $("dlg-mover").showModal();
+};
+$("mover-botones").onclick = async (ev) => {
+  const a = ev.target.closest("button[data-a]")?.dataset.a;
+  if (a == null) return;
+  const id = $("mover-botones").dataset.id;
+  const movidos = { ...(cuad.doc.movidos ?? {}) };
+  if (a === "0") delete movidos[id]; else movidos[id] = Number(a);
+  $("dlg-mover").close();
+  await guardarCuadrante({ movidos });
+};
+
+$("btn-cuad-guardar").onclick = async () => {
+  const patron = [...document.querySelectorAll("[data-patron]")].map((s) => s.value);
+  if (!patronValido(patron)) return aviso("Ese patrón no vale.");
+  try {
+    await updateDoc(doc(db, "turnos", estado.tid), { cuadrante: { patron, rotacion: Number($("cuad-rotacion").value) } });
+    aviso("Ajustes guardados");
+  } catch (e) { errorDatos(e); }
+};
+
+/* ---- descargas ---- */
+
+function bajar(blob, nombre) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+// La librería para hacer el Word solo se baja cuando hace falta.
+let cargandoDocx = null;
+function cargarDocx() {
+  if (window.docx) return Promise.resolve(window.docx);
+  cargandoDocx ??= new Promise((ok, ko) => {
+    const s = document.createElement("script");
+    s.src = DOCX_URL;
+    s.onload = () => (window.docx ? ok(window.docx) : ko(new Error("docx no cargó")));
+    s.onerror = () => ko(new Error("sin conexión con la librería de Word"));
+    document.head.append(s);
+  }).finally(() => { cargandoDocx = null; });
+  return cargandoDocx;
+}
+
+// PDF: se pone el documento en la página y se abre la impresión del sistema (Guardar como PDF).
+function imprimirDocumento(clase, d) {
+  const hoja = $("hoja-imp");
+  hoja.innerHTML = clase === "cuadrante" ? htmlCuadrante(d) : htmlEquipos(d);
+  const tituloAntes = document.title;
+  document.title = nombreArchivo(clase === "cuadrante" ? "Cuadrante" : "Equipos", d.turno, d.iso, "pdf").replace(/\.pdf$/, "");
+  document.body.classList.add("imprimiendo");
+  const fin = () => {
+    window.removeEventListener("afterprint", fin);
+    document.body.classList.remove("imprimiendo");
+    document.title = tituloAntes;
+    hoja.innerHTML = "";
+  };
+  window.addEventListener("afterprint", fin);
+  window.print();
+}
+
+document.querySelector(".descargas").onclick = async (ev) => {
+  const btn = ev.target.closest("button[data-doc]");
+  if (!btn) return;
+  const c = calcularCuadrante();
+  if (!c.datos) return;
+  const clase = btn.dataset.doc;
+  if (btn.dataset.fmt === "pdf") return imprimirDocumento(clase, c.datos);
+  btn.disabled = true;
+  try {
+    const D = await cargarDocx();
+    const documento = clase === "cuadrante" ? docxCuadrante(D, c.datos) : docxEquipos(D, c.datos);
+    bajar(await D.Packer.toBlob(documento), nombreArchivo(clase === "cuadrante" ? "Cuadrante" : "Equipos", c.datos.turno, c.datos.iso, "docx"));
+  } catch (e) {
+    console.error(e);
+    aviso("No se ha podido hacer el Word. Mira la conexión.");
+  } finally { btn.disabled = false; }
 };
 
 /* ---------- arranque ---------- */

@@ -26,6 +26,12 @@ Todo en español: interfaz, nombres de variables y funciones, comentarios y mens
   - Se trabajan 6 días y se libran 6 desde `inicio`; la app calcula qué días son de trabajo y solo deja marcar esos. Sin máximo de gente por día. Recuento por persona y año. Dos vistas, «Mes» (calendario con mapa de calor y detalle del día) y «Lista» (un día por línea, por tandas); la elegida se recuerda. Los días pasados se ven atenuados como historial y siguen siendo editables.
   - Mismo funcionamiento que las cundas: crea el admin, enlace `#unirse=<tid>.<codigo>`, echar y salirse.
   - **Varios admins:** son el campo `admin` más la lista `admins`. Un admin puede hacer admin a otro de dentro, pero solo se añaden: nadie le quita el permiso a otro (ni lo echa); cada uno puede quitarse el suyo al salirse, siempre que quede otro. Quien se sale siendo el campo `admin` lo pasa a otro admin. No hay «pasar el turno».
+  - **Cuadrante del día** (solo admins; botón «cuadrante» en la cabecera del turno; lógica en `cuadrante.js`, sin Firebase ni DOM):
+    - Mañana 07:00–15:00, tarde 15:00–23:00, noche 23:00–07:00, cada una en 3 franjas de 2 h 40 min. Qué turno toca cada uno de los 6 días de la tanda (por defecto M, M, T, T, N, N) y por dónde va la rotación van en `turnos/{tid}.cuadrante` = `{ patron: [6 letras M/T/N], rotacion: 0|1|2 }`.
+    - Los disponibles son los miembros sin ningún día marcado ese día. El CRC, el OAV y el Delfín móvil (opcional) los elige el admin de entre ellos y no entran en el reparto. El resto se reparte en 3 equipos seguidos y casi iguales, por orden alfabético (11 → 4, 4, 3); se puede mover a alguien a mano.
+    - Rotación: cada día todos avanzan una tarea en el orden Entrada → Salida → Pasajeros y cada equipo va una por delante del anterior; `base = rotacion + posición del día en la tanda`.
+    - `turnos/{tid}/cuadrantes/{AAAA-MM-DD}` (solo admins): `crc`, `oav`, `delfin` (uid o nulo) y `movidos` (mapa uid → 1, 2 o 3).
+    - Documentos: «Cuadrante» (tabla con título amarillo y equipos rojo/azul/verde) y «Equipos» (listas). Word con la librería `docx@8.5.0` cargada de jsDelivr solo al pulsar (`DOCX_URL`); PDF por la impresión del navegador (`#hoja-imp` + `@media print`). Para probar los Word, convertirlos con `soffice --headless --convert-to pdf`.
   - Los tipos de día se eligen en una paleta (VAC, SS, NAV, AP, OTR y Borrar); sin nada elegido, tocar un día solo lo selecciona. El recuento lo ve cada uno solo de sí mismo; los admins ven el de todos.
 
 ## Funcionamiento

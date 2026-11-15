@@ -93,7 +93,7 @@
 <section id="cuenta" class="pantalla ancha" hidden>
   <header class="cabecera">
     <h1 id="turno-nombre">Vacapol</h1>
-    <p class="quien"><span id="soy"></span> · <button id="btn-invitar" class="enlace" type="button">invitar</button> · <button id="btn-gente" class="enlace" type="button">gente</button> · <button id="btn-cambiar" class="enlace" type="button">turnos</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
+    <p class="quien"><span id="soy"></span> · <button id="btn-invitar" class="enlace" type="button">invitar</button> · <button id="btn-gente" class="enlace" type="button">gente</button> · <button id="btn-cuadrante" class="enlace" type="button" hidden>cuadrante</button><span id="sep-cuadrante" hidden> · </span><button id="btn-cambiar" class="enlace" type="button">turnos</button> · <button id="btn-salir" class="enlace" type="button">salir</button></p>
   </header>
 
   <nav class="mes" aria-label="Mes">
@@ -140,6 +140,71 @@
   <ul id="recuento" class="recuento"></ul>
   <p class="version"></p>
 </section>
+
+<!-- Cuadrante del día (solo admins) -->
+<section id="cuadrante" class="pantalla ancha" hidden>
+  <header class="cabecera">
+    <h1>Cuadrante</h1>
+    <p class="quien"><button id="btn-cuad-volver" class="enlace" type="button">‹ volver al calendario</button></p>
+  </header>
+
+  <nav class="mes" aria-label="Día">
+    <button id="cuad-ant" class="mes-flecha" type="button" aria-label="Día anterior">‹</button>
+    <input id="cuad-fecha" class="cuad-fecha" type="date" aria-label="Día del cuadrante">
+    <button id="cuad-sig" class="mes-flecha" type="button" aria-label="Día siguiente">›</button>
+  </nav>
+
+  <div id="cuad-turno" class="turnoet"></div>
+
+  <div id="cuad-cuerpo">
+    <h3 class="sec">Puestos</h3>
+    <div class="puesto"><label for="cuad-crc">CRC</label><select id="cuad-crc" data-puesto="crc"></select></div>
+    <div class="puesto"><label for="cuad-oav">OAV</label><select id="cuad-oav" data-puesto="oav"></select></div>
+    <div class="puesto"><label for="cuad-delfin">Delfín móvil</label><select id="cuad-delfin" data-puesto="delfin"></select></div>
+    <button id="btn-cuad-repetir" class="enlace" type="button">Repetir los puestos de días anteriores</button>
+
+    <h3 class="sec">Equipos <small>Reparto automático. Toca a alguien para moverlo.</small></h3>
+    <div id="cuad-equipos"></div>
+
+    <h3 class="sec">Descargar</h3>
+    <div class="descargas">
+      <span>Cuadrante del día</span>
+      <button class="boton-descarga" type="button" data-doc="cuadrante" data-fmt="docx">Word</button>
+      <button class="boton-descarga" type="button" data-doc="cuadrante" data-fmt="pdf">PDF</button>
+      <span>Equipos</span>
+      <button class="boton-descarga" type="button" data-doc="equipos" data-fmt="docx">Word</button>
+      <button class="boton-descarga" type="button" data-doc="equipos" data-fmt="pdf">PDF</button>
+    </div>
+  </div>
+
+  <details class="ajustes-cuad">
+    <summary>Ajustes del cuadrante</summary>
+    <p class="nota">Qué turno toca cada uno de los 6 días de trabajo de la tanda, y por dónde va la rotación de tareas.</p>
+    <div id="cuad-patron" class="patron"></div>
+    <label>El primer día de la tanda, el Equipo 1 empieza en
+      <select id="cuad-rotacion">
+        <option value="0">Entrada</option>
+        <option value="1">Salida</option>
+        <option value="2">Pasajeros</option>
+      </select>
+    </label>
+    <button id="btn-cuad-guardar" class="enlace" type="button">Guardar ajustes</button>
+  </details>
+  <p class="version"></p>
+</section>
+
+<dialog id="dlg-mover">
+  <form method="dialog">
+    <h3 id="mover-titulo">Mover</h3>
+    <div id="mover-botones" class="mover-botones"></div>
+    <div class="botones">
+      <button value="cancel" class="enlace" type="submit">Cancelar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Aquí se pone el documento para imprimirlo o guardarlo como PDF -->
+<div id="hoja-imp"></div>
 
 <!-- Gente del turno -->
 <dialog id="dlg-gente">
