@@ -74,6 +74,93 @@ export function repartir(disponibles, puestos = {}, movidos = {}) {
   return equipos;
 }
 
+/* ---------- Puestos y equipos de un día (se heredan del día anterior) ---------- */
+
+// Los puestos que se nombran a mano cada día. El Delfín móvil y el Delfín 3 son opcionales.
+export const PUESTOS = [
+  ["crc", "CRC"],
+  ["oav", "OAV"],
+  ["delfin", "Delfín móvil"],
+  ["delfin3", "Delfín 3"],
+];
+const CLAVES_PUESTO = PUESTOS.map(([k]) => k);
+
+const conEquipos = (d) => !!d && typeof d.equipos === "object" && d.equipos !== null;
+
+// Lo que se ve de un día. `doc` es lo guardado ese día (o {}), `base` el último cuadrante guardado antes.
+//  - Si el día está guardado, se usa tal cual.
+//  - Si no, se parte del cuadrante anterior: se quitan los que hoy no están disponibles y los que no
+//    estaban en el anterior (volvieron, o entraron) quedan en la bolsa para asignarlos a mano.
+//  - Sin nada anterior (o con un cuadrante de la primera versión, sin equipos), se reparte solo.
+// Devuelve { origen, puestos, equipos: [[persona]], bolsa: [persona], faltan: [n, n, n] }.
+export function resolverDia(disponibles, doc = {}, base = null) {
+  const porId = new Map(disponibles.map((p) => [p.id, p]));
+  let origen;
+  let fuente = null;
+  if (conEquipos(doc)) { origen = "guardado"; fuente = doc; }
+  else if (Object.keys(doc ?? {}).length) origen = "antiguo";
+  else if (conEquipos(base)) { origen = "anterior"; fuente = base; }
+  else origen = "auto";
+
+  const puestos = {};
+  const ocupados = new Set();
+  for (const k of CLAVES_PUESTO) {
+    const id = (fuente ?? doc ?? {})[k];
+    puestos[k] = id && porId.has(id) && !ocupados.has(id) ? id : null;
+    if (puestos[k]) ocupados.add(id);
+  }
+
+  let equipos;
+  if (fuente) {
+    equipos = [[], [], []];
+    for (const [id, n] of Object.entries(fuente.equipos)) {
+      if (porId.has(id) && !ocupados.has(id) && [1, 2, 3].includes(n)) equipos[n - 1].push(porId.get(id));
+    }
+    for (const eq of equipos) eq.sort(porNombre);
+  } else {
+    equipos = repartir(disponibles, puestos, doc?.movidos ?? {});
+  }
+
+  const asignados = new Set([...ocupados, ...equipos.flat().map((p) => p.id)]);
+  const bolsa = fuente ? disponibles.filter((p) => !asignados.has(p.id)).sort(porNombre) : [];
+  // Huecos: cuántos faltan en cada equipo respecto al cuadrante anterior.
+  const faltan = [0, 1, 2].map((e) => (conEquipos(base)
+    ? Math.max(0, Object.values(base.equipos).filter((n) => n === e + 1).length - equipos[e].length) : 0));
+  return { origen, puestos, equipos, bolsa, faltan };
+}
+
+// Lo que se guarda de una vista: los puestos (id o nulo) y el equipo de cada uno (id → 1, 2 o 3).
+export function docDeVista(v) {
+  const d = {};
+  for (const k of CLAVES_PUESTO) d[k] = v.puestos[k] ?? null;
+  d.equipos = {};
+  v.equipos.forEach((eq, e) => { for (const p of eq) d.equipos[p.id] = e + 1; });
+  return d;
+}
+
+const sacar = (d, id) => {
+  for (const k of CLAVES_PUESTO) if (d[k] === id) d[k] = null;
+  delete d.equipos[id];
+};
+// Cambios sobre lo guardado de un día. Devuelven una copia nueva.
+export function ponerEnPuesto(d, clave, id) {
+  const n = { ...d, equipos: { ...d.equipos } };
+  if (id) sacar(n, id);
+  n[clave] = id || null; // quien lo ocupaba antes se queda sin asignar (en la bolsa)
+  return n;
+}
+export function ponerEnEquipo(d, id, equipo) {
+  const n = { ...d, equipos: { ...d.equipos } };
+  sacar(n, id);
+  n.equipos[id] = equipo;
+  return n;
+}
+export function mandarALaBolsa(d, id) {
+  const n = { ...d, equipos: { ...d.equipos } };
+  sacar(n, id);
+  return n;
+}
+
 /* ---------- HTML (vista previa y PDF por impresión) ---------- */
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -91,7 +178,8 @@ export function htmlCuadrante(d) {
   return `<div class="doc doc-cuadrante"><h1><span>${esc(titulo(d.turno, d.iso))}</span></h1>
     <table><tr><td class="vacia"></td>${fr.map((x) => `<th>${x}</th>`).join("")}</tr>${filas}</table>
     <p class="pie"><b>CRC:</b> ${esc((d.crc ?? "").toUpperCase())}<br><b>OAV:</b> ${esc((d.oav ?? "").toUpperCase())}<br>
-    <b class="pq">DELFÍN MÓVIL${d.delfin ? `:</b> ${esc(d.delfin.toUpperCase())}` : ".</b>"}</p></div>`;
+    <b class="pq">DELFÍN MÓVIL${d.delfin ? `:</b> ${esc(d.delfin.toUpperCase())}` : ".</b>"}<br>
+    <b class="pq">DELFÍN 3${d.delfin3 ? `:</b> ${esc(d.delfin3.toUpperCase())}` : ".</b>"}</p></div>`;
 }
 
 export function htmlEquipos(d) {
@@ -145,11 +233,11 @@ export function docxCuadrante(D, d) {
         new Paragraph({ spacing: { before: 700 }, children: [] }),
         linea("CRC", d.crc ?? ""),
         linea("OAV", d.oav ?? ""),
-        // Sin nombre se queda como «DELFÍN MÓVIL.»
-        new Paragraph({
-          indent: { left: 700 },
-          children: [tx(d.delfin ? "DELFÍN MÓVIL:" : "DELFÍN MÓVIL.", { bold: true, size: 24 }), ...(d.delfin ? [tx(` ${d.delfin.toUpperCase()}`, { size: 24 })] : [])],
-        }),
+        // Sin nombre se quedan como «DELFÍN MÓVIL.» y «DELFÍN 3.»
+        ...[["DELFÍN MÓVIL", d.delfin], ["DELFÍN 3", d.delfin3]].map(([etiqueta, nombre]) => new Paragraph({
+          indent: { left: 700 }, spacing: { after: 20 },
+          children: [tx(nombre ? `${etiqueta}:` : `${etiqueta}.`, { bold: true, size: 24 }), ...(nombre ? [tx(` ${nombre.toUpperCase()}`, { size: 24 })] : [])],
+        })),
       ],
     }],
   });

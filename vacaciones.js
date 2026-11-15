@@ -6,11 +6,12 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, deleteDoc, getDoc, getDocs, setDoc, updateDoc, onSnapshot,
-  query, where, arrayUnion, arrayRemove, writeBatch, serverTimestamp,
+  query, where, orderBy, documentId, arrayUnion, arrayRemove, writeBatch, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { VERSION } from "./version.js";
 import {
-  TURNOS, TAREA_TEXTO, COLOR_EQUIPO, PATRON_POR_DEFECTO, patronValido, horarioTurno, tareaDe, repartir,
+  TURNOS, TAREA_TEXTO, COLOR_EQUIPO, PATRON_POR_DEFECTO, PUESTOS, patronValido, horarioTurno, tareaDe,
+  resolverDia, docDeVista, ponerEnPuesto, ponerEnEquipo, mandarALaBolsa,
   htmlCuadrante, htmlEquipos, docxCuadrante, docxEquipos, nombreArchivo,
 } from "./cuadrante.js";
 
@@ -720,7 +721,7 @@ $("btn-enlace-nuevo").onclick = async () => {
 /* ---------- cuadrante del día (solo admins) ---------- */
 
 const DOCX_URL = "https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js";
-const cuad = { iso: hoyISO(), doc: {}, dejar: null, listo: false };
+const cuad = { iso: hoyISO(), doc: {}, existe: false, docListo: false, base: null, baseIso: null, baseListo: false, dejar: null };
 
 const sumarDias = (iso, n) => { const d = aFecha(iso); d.setDate(d.getDate() + n); return aISO(d); };
 
@@ -737,60 +738,87 @@ function diaDeCuadrante(iso) {
 
 function escucharCuadrante() {
   cuad.dejar?.();
-  cuad.listo = false;
-  cuad.doc = {};
+  Object.assign(cuad, { doc: {}, existe: false, docListo: false, base: null, baseIso: null, baseListo: false });
   const iso = cuad.iso;
   cuad.dejar = onSnapshot(doc(db, "turnos", estado.tid, "cuadrantes", iso), (snap) => {
     if (cuad.iso !== iso) return;
     cuad.doc = snap.exists() ? snap.data() : {};
-    cuad.listo = true;
+    cuad.existe = snap.exists();
+    cuad.docListo = true;
     pintarCuadrante();
   }, (e) => console.error(e));
+  cargarBaseCuadrante(iso);
 }
 function dejarCuadrante() { cuad.dejar?.(); cuad.dejar = null; }
 
-// Todo lo que depende del día y de quién está: disponibles, puestos, equipos y los datos de los documentos.
+// El último cuadrante guardado antes de este día: de ahí se heredan los puestos y los equipos.
+async function cargarBaseCuadrante(iso) {
+  try {
+    // Los de los 30 días anteriores (por id, que es la fecha), y vale el último.
+    const q = query(collection(db, "turnos", estado.tid, "cuadrantes"), where(documentId(), ">=", sumarDias(iso, -30)), where(documentId(), "<", iso), orderBy(documentId()));
+    const snap = await getDocs(q);
+    if (cuad.iso !== iso) return;
+    const ultimo = snap.docs.at(-1);
+    cuad.base = ultimo ? ultimo.data() : null;
+    cuad.baseIso = ultimo ? ultimo.id : null;
+  } catch (e) {
+    console.error(e);
+    if (cuad.iso !== iso) return;
+  }
+  cuad.baseListo = true;
+  pintarCuadrante();
+}
+
+// Todo lo que depende del día y de quién está: disponibles, vista (puestos, equipos, bolsa) y datos de los documentos.
 function calcularCuadrante() {
   const info = diaDeCuadrante(cuad.iso);
   const libres = new Set(estado.dias.filter((d) => d.dia === cuad.iso).map((d) => d.uid));
   const gente = estado.miembros.map((m) => ({ id: m.id, nombre: m.nombre }));
-  const disponibles = gente.filter((p) => !libres.has(p.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  const libran = gente.filter((p) => libres.has(p.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  const dispIds = new Set(disponibles.map((p) => p.id));
-  // Un puesto de alguien que ya no está disponible (por ejemplo, ha marcado ese día después) cuenta como vacío.
-  const puestos = {};
-  for (const k of ["crc", "oav", "delfin"]) puestos[k] = dispIds.has(cuad.doc[k]) ? cuad.doc[k] : null;
-  const movidos = cuad.doc.movidos ?? {};
-  const equipos = info ? repartir(disponibles, puestos, movidos) : [[], [], []];
+  const alfa = (a, b) => a.nombre.localeCompare(b.nombre, "es");
+  const disponibles = gente.filter((p) => !libres.has(p.id)).sort(alfa);
+  const libran = gente.filter((p) => libres.has(p.id)).sort(alfa);
+  const vista = info ? resolverDia(disponibles, cuad.doc, cuad.base) : null;
   const nombreDe = (id) => gente.find((p) => p.id === id)?.nombre ?? null;
   return {
-    info, disponibles, libran, puestos, movidos, equipos,
+    info, disponibles, libran, vista, nombreDe,
     datos: info && {
-      turno: info.turno, iso: cuad.iso, base: info.base, equipos: equipos.map((eq) => eq.map((p) => p.nombre)),
-      crc: nombreDe(puestos.crc), oav: nombreDe(puestos.oav), delfin: nombreDe(puestos.delfin),
+      turno: info.turno, iso: cuad.iso, base: info.base, equipos: vista.equipos.map((eq) => eq.map((p) => p.nombre)),
+      crc: nombreDe(vista.puestos.crc), oav: nombreDe(vista.puestos.oav), delfin: nombreDe(vista.puestos.delfin), delfin3: nombreDe(vista.puestos.delfin3),
     },
   };
 }
+
+const chipCuad = (p, extra = "") => `<button class="chip${extra}" type="button" data-mover="${esc(p.id)}">${esc(p.nombre)}</button>`;
 
 function pintarCuadrante() {
   if (!estado.turno || !enPantalla("cuadrante")) return;
   const c = calcularCuadrante();
   $("cuad-fecha").value = cuad.iso;
   const banda = $("cuad-turno");
-  $("cuad-cuerpo").hidden = !c.info;
+  const listo = cuad.docListo && cuad.baseListo;
+  $("cuad-cuerpo").hidden = !c.info || !listo;
   if (!c.info) {
     banda.innerHTML = `<b>Día de descanso</b><small>Este día no se trabaja, así que no hay cuadrante.</small>`;
+  } else if (!listo) {
+    banda.innerHTML = `<b>${TURNOS[c.info.turno].nombre}</b> · ${horarioTurno(c.info.turno)}<small>Cargando…</small>`;
   } else {
+    const v = c.vista;
     banda.innerHTML = `<b>${TURNOS[c.info.turno].nombre}</b> · ${horarioTurno(c.info.turno)}<small>Trabajan ${c.disponibles.length}${
       c.libran.length ? ` · libran ${c.libran.length} (${c.libran.map((p) => esc(p.nombre)).join(", ")})` : ""}</small>`;
-    for (const k of ["crc", "oav", "delfin"]) {
-      const otros = new Set(["crc", "oav", "delfin"].filter((x) => x !== k).map((x) => c.puestos[x]).filter(Boolean));
-      $(`cuad-${k}`).innerHTML = `<option value="">${k === "delfin" ? "Sin nombrar" : "Sin elegir"}</option>` + c.disponibles
-        .map((p) => `<option value="${esc(p.id)}"${otros.has(p.id) ? " disabled" : ""}${c.puestos[k] === p.id ? " selected" : ""}>${esc(p.nombre)}</option>`).join("");
+    $("cuad-origen").textContent = v.origen === "guardado" ? "Guardado."
+      : v.origen === "anterior" ? `Partimos del cuadrante del ${fmtRango(cuad.baseIso)}: se repiten puestos y equipos, sin los que hoy no están. Se guarda al cambiar algo o al descargar.`
+      : "Sin cuadrante anterior: reparto automático. Se guarda al cambiar algo o al descargar.";
+    for (const [k] of PUESTOS) {
+      const otros = new Set(PUESTOS.map(([x]) => x).filter((x) => x !== k).map((x) => v.puestos[x]).filter(Boolean));
+      $(`cuad-${k}`).innerHTML = `<option value="">${k === "crc" || k === "oav" ? "Sin elegir" : "Sin nombrar"}</option>` + c.disponibles
+        .map((p) => `<option value="${esc(p.id)}"${otros.has(p.id) ? " disabled" : ""}${v.puestos[k] === p.id ? " selected" : ""}>${esc(p.nombre)}</option>`).join("");
     }
-    $("cuad-equipos").innerHTML = c.equipos.map((eq, e) => `<div class="eqcard" style="--c:#${COLOR_EQUIPO[e]}">
-      <b>Equipo ${e + 1}</b><small>Empieza en ${TAREA_TEXTO[tareaDe(c.info.base, e, 0)].nombre}</small>
-      <div class="chips">${eq.map((p) => `<button class="chip${c.movidos[p.id] ? " movido" : ""}" type="button" data-mover="${esc(p.id)}">${esc(p.nombre)}</button>`).join("") || `<span class="nota">Nadie</span>`}</div></div>`).join("");
+    $("cuad-equipos").innerHTML = v.equipos.map((eq, e) => `<div class="eqcard" style="--c:#${COLOR_EQUIPO[e]}">
+      <b>Equipo ${e + 1}</b><small>${eq.length} · empieza en ${TAREA_TEXTO[tareaDe(c.info.base, e, 0)].nombre}</small>${v.faltan[e] ? `<span class="falta">falta ${v.faltan[e]}</span>` : ""}
+      <div class="chips">${eq.map((p) => chipCuad(p)).join("") || `<span class="nota">Nadie</span>`}</div></div>`).join("");
+    $("cuad-bolsa-sec").hidden = !v.bolsa.length;
+    $("cuad-bolsa").innerHTML = v.bolsa.map((p) => chipCuad(p, " nuevo")).join("");
+    $("cuad-bolsa-n").textContent = v.bolsa.length;
   }
   // Ajustes (solo si no se está editando alguno ahora mismo)
   if (!$("cuad-patron").contains(document.activeElement)) {
@@ -827,62 +855,53 @@ $("cuad-ant").onclick = () => irADia(sumarDias(cuad.iso, -1));
 $("cuad-sig").onclick = () => irADia(sumarDias(cuad.iso, 1));
 $("cuad-fecha").onchange = (ev) => irADia(ev.target.value);
 
-// Guarda solo los campos que se dan (el resto del día se queda como está).
-async function guardarCuadrante(parcial) {
+// Se guarda el día entero tal como se ve (sin los que hoy no están), que es de donde parte el día siguiente.
+async function guardarDia(d) {
   try {
-    await setDoc(doc(db, "turnos", estado.tid, "cuadrantes", cuad.iso), parcial, { mergeFields: Object.keys(parcial) });
+    await setDoc(doc(db, "turnos", estado.tid, "cuadrantes", cuad.iso), d);
   } catch (e) { errorDatos(e); }
+}
+function cambiarCuadrante(mutar) {
+  const c = calcularCuadrante();
+  if (!c.vista) return Promise.resolve();
+  return guardarDia(mutar(docDeVista(c.vista)));
 }
 
 for (const sel of document.querySelectorAll("[data-puesto]")) {
-  sel.onchange = () => guardarCuadrante({ [sel.dataset.puesto]: sel.value || null });
+  sel.onchange = () => cambiarCuadrante((d) => ponerEnPuesto(d, sel.dataset.puesto, sel.value || null));
 }
 
-$("btn-cuad-repetir").onclick = async () => {
+// Tocar a alguien (de un equipo o de la bolsa) para asignarlo a un puesto o a un equipo, o mandarlo a la bolsa.
+function abrirMover(id) {
   const c = calcularCuadrante();
-  if (!c.info) return;
-  try {
-    for (let k = 1; k <= 14; k++) {
-      const iso = sumarDias(cuad.iso, -k);
-      const snap = await getDoc(doc(db, "turnos", estado.tid, "cuadrantes", iso));
-      const d = snap.exists() ? snap.data() : null;
-      if (!d || !(d.crc || d.oav || d.delfin)) continue;
-      const dispIds = new Set(c.disponibles.map((p) => p.id));
-      const usados = new Set();
-      const nuevo = {};
-      for (const p of ["crc", "oav", "delfin"]) {
-        const id = d[p];
-        nuevo[p] = id && dispIds.has(id) && !usados.has(id) ? id : null;
-        if (nuevo[p]) usados.add(id);
-      }
-      await guardarCuadrante(nuevo);
-      return aviso(`Puestos de ${fmtRango(iso)}`);
-    }
-    aviso("No hay puestos de los últimos días");
-  } catch (e) { errorDatos(e); }
-};
-
-// Mover a alguien de equipo a mano.
-$("cuad-equipos").onclick = (ev) => {
-  const id = ev.target.closest("button[data-mover]")?.dataset.mover;
   const m = estado.miembros.find((x) => x.id === id);
-  if (!m) return;
-  const c = calcularCuadrante();
-  const actual = c.equipos.findIndex((eq) => eq.some((p) => p.id === id));
-  $("mover-titulo").textContent = `Mover a ${m.nombre}`;
-  $("mover-botones").innerHTML = [0, 1, 2].map((e) => `<button type="button" class="boton-linea" data-a="${e + 1}"${e === actual ? " disabled" : ""}>Equipo ${e + 1}</button>`).join("")
-    + (c.movidos[id] ? `<button type="button" class="enlace" data-a="0">Quitar el cambio</button>` : "");
+  if (!m || !c.vista) return;
+  const v = c.vista;
+  const enBolsa = v.bolsa.some((p) => p.id === id);
+  const actual = v.equipos.findIndex((eq) => eq.some((p) => p.id === id));
+  $("mover-titulo").textContent = enBolsa ? `Asignar a ${m.nombre}` : `Mover a ${m.nombre}`;
+  const equipos = [0, 1, 2].map((e) => `<button type="button" class="boton-linea" data-a="e:${e + 1}"${e === actual ? " disabled" : ""}>Equipo ${e + 1} <small>(${v.equipos[e].length}${v.faltan[e] ? `, falta ${v.faltan[e]}` : ""})</small></button>`);
+  const puestos = PUESTOS.map(([k, etiqueta]) => {
+    const ocupante = v.puestos[k] ? c.nombreDe(v.puestos[k]) : null;
+    return `<button type="button" class="boton-linea" data-a="p:${k}">${etiqueta} <small>${ocupante ? `(ahora ${esc(ocupante)})` : "(libre)"}</small></button>`;
+  });
+  $("mover-botones").innerHTML = equipos.join("") + puestos.join("")
+    + (enBolsa ? "" : `<button type="button" class="enlace" data-a="b">Mandar a la bolsa (sin asignar)</button>`);
   $("mover-botones").dataset.id = id;
   $("dlg-mover").showModal();
+}
+$("cuad-equipos").onclick = $("cuad-bolsa").onclick = (ev) => {
+  const id = ev.target.closest("button[data-mover]")?.dataset.mover;
+  if (id) abrirMover(id);
 };
 $("mover-botones").onclick = async (ev) => {
   const a = ev.target.closest("button[data-a]")?.dataset.a;
-  if (a == null) return;
+  if (!a) return;
   const id = $("mover-botones").dataset.id;
-  const movidos = { ...(cuad.doc.movidos ?? {}) };
-  if (a === "0") delete movidos[id]; else movidos[id] = Number(a);
   $("dlg-mover").close();
-  await guardarCuadrante({ movidos });
+  await cambiarCuadrante((d) => a === "b" ? mandarALaBolsa(d, id)
+    : a.startsWith("p:") ? ponerEnPuesto(d, a.slice(2), id)
+    : ponerEnEquipo(d, id, Number(a.slice(2))));
 };
 
 $("btn-cuad-guardar").onclick = async () => {
@@ -942,7 +961,11 @@ document.querySelector(".descargas").onclick = async (ev) => {
   const btn = ev.target.closest("button[data-doc]");
   if (!btn) return;
   const c = calcularCuadrante();
-  if (!c.datos) return;
+  if (!c.datos || !c.vista) return;
+  const sinAsignar = c.vista.bolsa;
+  if (sinAsignar.length && !confirm(`Hay ${sinAsignar.length} sin asignar (${sinAsignar.map((p) => p.nombre).join(", ")}) y no saldrán en los documentos. ¿Descargar igualmente?`)) return;
+  // Lo que se descarga queda guardado, y de ahí parte el día siguiente.
+  if (!cuad.existe || c.vista.origen === "antiguo") guardarDia(docDeVista(c.vista));
   const clase = btn.dataset.doc;
   if (btn.dataset.fmt === "pdf") return imprimirDocumento(clase, c.datos);
   btn.disabled = true;

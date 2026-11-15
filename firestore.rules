@@ -175,16 +175,19 @@ service cloud.firestore {
         allow delete: if esDelTurno(tid) && (resource.data.uid == request.auth.uid || esAdminTurno(tid));
       }
 
-      // Cuadrante de un día (id AAAA-MM-DD), solo para los admins: quién es el CRC, el OAV y el
-      // Delfín móvil (uid o nulo) y a quién se ha movido de equipo a mano (uid → 1, 2 o 3).
+      // Cuadrante de un día (id AAAA-MM-DD), solo para los admins: quién es el CRC, el OAV, el Delfín
+      // móvil y el Delfín 3 (uid o nulo) y el equipo de cada uno (uid → 1, 2 o 3). «movidos» es de
+      // la primera versión y se sigue admitiendo.
       match /cuadrantes/{dia} {
         allow read, delete: if esAdminTurno(tid);
         allow create, update: if esAdminTurno(tid)
           && fechaValida(dia)
-          && request.resource.data.keys().hasOnly(["crc", "oav", "delfin", "movidos"])
+          && request.resource.data.keys().hasOnly(["crc", "oav", "delfin", "delfin3", "equipos", "movidos"])
           && puestoValido(request.resource.data, "crc")
           && puestoValido(request.resource.data, "oav")
           && puestoValido(request.resource.data, "delfin")
+          && puestoValido(request.resource.data, "delfin3")
+          && (!("equipos" in request.resource.data) || request.resource.data.equipos is map)
           && (!("movidos" in request.resource.data) || request.resource.data.movidos is map);
       }
     }
