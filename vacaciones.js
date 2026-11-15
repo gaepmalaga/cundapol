@@ -773,22 +773,28 @@ async function cargarBaseCuadrante(iso) {
 function calcularCuadrante() {
   const info = diaDeCuadrante(cuad.iso);
   const libres = new Set(estado.dias.filter((d) => d.dia === cuad.iso).map((d) => d.uid));
+  // «Hoy no viene»: los que la app daría por presentes pero el admin ha marcado con la ×.
+  const ausentes = new Set(Array.isArray(cuad.doc.ausentes) ? cuad.doc.ausentes : []);
   const gente = estado.miembros.map((m) => ({ id: m.id, nombre: m.nombre }));
   const alfa = (a, b) => a.nombre.localeCompare(b.nombre, "es");
-  const disponibles = gente.filter((p) => !libres.has(p.id)).sort(alfa);
+  const disponibles = gente.filter((p) => !libres.has(p.id) && !ausentes.has(p.id)).sort(alfa);
   const libran = gente.filter((p) => libres.has(p.id)).sort(alfa);
+  const noVienen = gente.filter((p) => !libres.has(p.id) && ausentes.has(p.id)).sort(alfa);
   const vista = info ? resolverDia(disponibles, cuad.doc, cuad.base) : null;
   const nombreDe = (id) => gente.find((p) => p.id === id)?.nombre ?? null;
   return {
-    info, disponibles, libran, vista, nombreDe,
+    info, disponibles, libran, noVienen, vista, nombreDe,
     datos: info && {
       turno: info.turno, iso: cuad.iso, base: info.base, equipos: vista.equipos.map((eq) => eq.map((p) => p.nombre)),
-      crc: nombreDe(vista.puestos.crc), oav: nombreDe(vista.puestos.oav), delfin: nombreDe(vista.puestos.delfin), delfin3: nombreDe(vista.puestos.delfin3),
+      crc: nombreDe(vista.puestos.crc), oav: nombreDe(vista.puestos.oav), delfin: nombreDe(vista.puestos.delfin), delfin3: nombreDe(vista.puestos.delfin3), delfin20: nombreDe(vista.puestos.delfin20),
     },
   };
 }
 
-const chipCuad = (p, extra = "") => `<button class="chip${extra}" type="button" data-mover="${esc(p.id)}">${esc(p.nombre)}</button>`;
+// Lo que se guarda de un día: la vista (puestos y equipos) y los que hoy no vienen.
+const docParaGuardar = (c) => ({ ...docDeVista(c.vista), ausentes: c.noVienen.map((p) => p.id) });
+
+const chipCuad = (p, extra = "") => `<span class="chipx"><button class="chip${extra}" type="button" data-mover="${esc(p.id)}">${esc(p.nombre)}</button><button class="x" type="button" data-ausente="${esc(p.id)}" aria-label="${esc(p.nombre)}: hoy no viene" title="Hoy no viene">×</button></span>`;
 
 function pintarCuadrante() {
   if (!estado.turno || !enPantalla("cuadrante")) return;
@@ -819,6 +825,9 @@ function pintarCuadrante() {
     $("cuad-bolsa-sec").hidden = !v.bolsa.length;
     $("cuad-bolsa").innerHTML = v.bolsa.map((p) => chipCuad(p, " nuevo")).join("");
     $("cuad-bolsa-n").textContent = v.bolsa.length;
+    $("cuad-ausentes-sec").hidden = !c.noVienen.length;
+    $("cuad-ausentes").innerHTML = c.noVienen.map((p) => `<span class="chipx ausente"><span class="chip">${esc(p.nombre)}</span><button class="x" type="button" data-vuelve="${esc(p.id)}" aria-label="${esc(p.nombre)}: vuelve" title="Devolver a «Sin asignar»">↩</button></span>`).join("");
+    $("cuad-ausentes-n").textContent = c.noVienen.length;
   }
   // Ajustes (solo si no se está editando alguno ahora mismo)
   if (!$("cuad-patron").contains(document.activeElement)) {
@@ -864,7 +873,7 @@ async function guardarDia(d) {
 function cambiarCuadrante(mutar) {
   const c = calcularCuadrante();
   if (!c.vista) return Promise.resolve();
-  return guardarDia(mutar(docDeVista(c.vista)));
+  return guardarDia(mutar(docParaGuardar(c)));
 }
 
 for (const sel of document.querySelectorAll("[data-puesto]")) {
@@ -891,8 +900,18 @@ function abrirMover(id) {
   $("dlg-mover").showModal();
 }
 $("cuad-equipos").onclick = $("cuad-bolsa").onclick = (ev) => {
+  const ausente = ev.target.closest("button[data-ausente]")?.dataset.ausente;
+  if (ausente) {
+    const m = estado.miembros.find((x) => x.id === ausente);
+    cambiarCuadrante((d) => ({ ...mandarALaBolsa(d, ausente), ausentes: [...new Set([...(d.ausentes ?? []), ausente])] }));
+    return aviso(`${m?.nombre ?? "Esa persona"} hoy no viene`);
+  }
   const id = ev.target.closest("button[data-mover]")?.dataset.mover;
   if (id) abrirMover(id);
+};
+$("cuad-ausentes").onclick = (ev) => {
+  const id = ev.target.closest("button[data-vuelve]")?.dataset.vuelve;
+  if (id) cambiarCuadrante((d) => ({ ...d, ausentes: (d.ausentes ?? []).filter((x) => x !== id) }));
 };
 $("mover-botones").onclick = async (ev) => {
   const a = ev.target.closest("button[data-a]")?.dataset.a;
@@ -965,7 +984,7 @@ document.querySelector(".descargas").onclick = async (ev) => {
   const sinAsignar = c.vista.bolsa;
   if (sinAsignar.length && !confirm(`Hay ${sinAsignar.length} sin asignar (${sinAsignar.map((p) => p.nombre).join(", ")}) y no saldrán en los documentos. ¿Descargar igualmente?`)) return;
   // Lo que se descarga queda guardado, y de ahí parte el día siguiente.
-  if (!cuad.existe || c.vista.origen === "antiguo") guardarDia(docDeVista(c.vista));
+  if (!cuad.existe || c.vista.origen === "antiguo") guardarDia(docParaGuardar(c));
   const clase = btn.dataset.doc;
   if (btn.dataset.fmt === "pdf") return imprimirDocumento(clase, c.datos);
   btn.disabled = true;

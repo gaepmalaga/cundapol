@@ -516,3 +516,15 @@ dialog .nota { margin-bottom: 16px; }
 .bolsa .chip, .chip.nuevo { background: color-mix(in srgb, #b8941f 20%, var(--papel)); border-color: #b8941f; cursor: pointer; font-family: var(--sans); }
 .mover-botones .boton-linea small { color: var(--tenue); font-weight: 400; }
 #cuad-origen { margin: 8px 0 0; font-size: 13px; }
+
+/* Personas de los equipos con su × («hoy no viene») */
+.chipx { display: inline-flex; align-items: stretch; }
+.chipx .chip { border-radius: 99px 0 0 99px; border-right-width: 0; }
+.chipx .x {
+  min-width: 30px; padding: 0 8px; cursor: pointer; font: 700 16px/1 var(--sans); color: var(--tenue);
+  background: var(--papel); border: 1.5px solid var(--regla); border-radius: 0 99px 99px 0;
+}
+.chipx .x:hover, .chipx .x:focus-visible { color: #fff; background: #a3261a; border-color: #a3261a; }
+.chipx.ausente .chip { text-decoration: line-through; color: var(--tenue); background: transparent; cursor: default; }
+.chipx.ausente .x:hover { background: var(--tinta); border-color: var(--tinta); }
+.eqcard .chipx .chip.movido { border-color: var(--c); }
