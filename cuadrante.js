@@ -76,12 +76,13 @@ export function repartir(disponibles, puestos = {}, movidos = {}) {
 
 /* ---------- Puestos y equipos de un día (se heredan del día anterior) ---------- */
 
-// Los puestos que se nombran a mano cada día. El Delfín móvil y el Delfín 3 son opcionales.
+// Los puestos que se nombran a mano cada día. Los Delfín (móvil, 3 y 20) son opcionales.
 export const PUESTOS = [
   ["crc", "CRC"],
   ["oav", "OAV"],
   ["delfin", "Delfín móvil"],
   ["delfin3", "Delfín 3"],
+  ["delfin20", "Delfín 20"],
 ];
 const CLAVES_PUESTO = PUESTOS.map(([k]) => k);
 
@@ -179,7 +180,8 @@ export function htmlCuadrante(d) {
     <table><tr><td class="vacia"></td>${fr.map((x) => `<th>${x}</th>`).join("")}</tr>${filas}</table>
     <p class="pie"><b>CRC:</b> ${esc((d.crc ?? "").toUpperCase())}<br><b>OAV:</b> ${esc((d.oav ?? "").toUpperCase())}<br>
     <b class="pq">DELFÍN MÓVIL${d.delfin ? `:</b> ${esc(d.delfin.toUpperCase())}` : ".</b>"}<br>
-    <b class="pq">DELFÍN 3${d.delfin3 ? `:</b> ${esc(d.delfin3.toUpperCase())}` : ".</b>"}</p></div>`;
+    <b class="pq">DELFÍN 3${d.delfin3 ? `:</b> ${esc(d.delfin3.toUpperCase())}` : ".</b>"}<br>
+    <b class="pq">DELFÍN 20${d.delfin20 ? `:</b> ${esc(d.delfin20.toUpperCase())}` : ".</b>"}</p></div>`;
 }
 
 export function htmlEquipos(d) {
@@ -233,8 +235,8 @@ export function docxCuadrante(D, d) {
         new Paragraph({ spacing: { before: 700 }, children: [] }),
         linea("CRC", d.crc ?? ""),
         linea("OAV", d.oav ?? ""),
-        // Sin nombre se quedan como «DELFÍN MÓVIL.» y «DELFÍN 3.»
-        ...[["DELFÍN MÓVIL", d.delfin], ["DELFÍN 3", d.delfin3]].map(([etiqueta, nombre]) => new Paragraph({
+        // Sin nombre se quedan como «DELFÍN MÓVIL.», «DELFÍN 3.» y «DELFÍN 20.»
+        ...[["DELFÍN MÓVIL", d.delfin], ["DELFÍN 3", d.delfin3], ["DELFÍN 20", d.delfin20]].map(([etiqueta, nombre]) => new Paragraph({
           indent: { left: 700 }, spacing: { after: 20 },
           children: [tx(nombre ? `${etiqueta}:` : `${etiqueta}.`, { bold: true, size: 24 }), ...(nombre ? [tx(` ${nombre.toUpperCase()}`, { size: 24 })] : [])],
         })),
@@ -256,4 +258,6 @@ export function docxEquipos(D, d) {
 }
 
 // Nombre de archivo: «Cuadrante TARDE 2026-11-03.docx»
-export const nombreArchivo = (clase, turno, iso, ext) => `${clase} ${TURNOS[turno].nombre} ${iso}.${ext}`;
+// Sin acentos ni eñes, para que ningún móvil o navegador se líe con el nombre.
+const sinAcentos = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+export const nombreArchivo = (clase, turno, iso, ext) => `${clase} ${sinAcentos(TURNOS[turno].nombre)} ${iso}.${ext}`;

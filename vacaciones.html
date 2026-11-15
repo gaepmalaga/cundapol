@@ -162,6 +162,7 @@
     <div class="puesto"><label for="cuad-oav">OAV</label><select id="cuad-oav" data-puesto="oav"></select></div>
     <div class="puesto"><label for="cuad-delfin">Delfín móvil</label><select id="cuad-delfin" data-puesto="delfin"></select></div>
     <div class="puesto"><label for="cuad-delfin3">Delfín 3</label><select id="cuad-delfin3" data-puesto="delfin3"></select></div>
+    <div class="puesto"><label for="cuad-delfin20">Delfín 20</label><select id="cuad-delfin20" data-puesto="delfin20"></select></div>
     <p id="cuad-origen" class="nota"></p>
 
     <div id="cuad-bolsa-sec" hidden>
@@ -169,8 +170,13 @@
       <div id="cuad-bolsa" class="chips bolsa"></div>
     </div>
 
-    <h3 class="sec">Equipos <small>Toca a alguien para moverlo.</small></h3>
+    <h3 class="sec">Equipos <small>Toca a alguien para moverlo. La × es que hoy no viene.</small></h3>
     <div id="cuad-equipos"></div>
+
+    <div id="cuad-ausentes-sec" hidden>
+      <h3 class="sec">Hoy no vienen (<span id="cuad-ausentes-n">0</span>) <small>Tocar ↩ los devuelve a «Sin asignar».</small></h3>
+      <div id="cuad-ausentes" class="chips"></div>
+    </div>
 
     <h3 class="sec">Descargar</h3>
     <div class="descargas">
