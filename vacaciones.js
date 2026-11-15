@@ -52,6 +52,7 @@ const estado = {
   turnos: [], turnosListos: false,
   tid: null, turno: null, miembros: [], dias: [], mes: null, sel: null,
   aus: { iso: null, ids: [], dejar: null }, // los marcados «hoy no viene» en el cuadrante del día seleccionado (solo admins)
+  pub: { iso: null, doc: null, listo: false, dejar: null }, // el cuadrante publicado del día seleccionado (lo ven todos)
   vista: "mes", herramienta: null, orden: "az", cerosAbiertos: false,
   modoAlta: false, autoAbrir: false, saliendo: false,
 };
@@ -346,6 +347,7 @@ function dejarTurno() {
   dejarDeEscucharTurno = [];
   dejarCuadrante();
   seguirAusentes(null);
+  seguirPublicado(null);
 }
 
 function abrirTurno(tid) {
@@ -454,7 +456,10 @@ function pintar() {
   seguirAusentes(soyAdmin() && estado.vista === "mes" ? estado.sel : null);
   const ausentes = estado.aus.iso && estado.aus.iso === estado.sel
     ? estado.aus.ids.filter((u) => gente.has(u)).map((u) => gente.get(u)).sort((a, b) => a.localeCompare(b, "es")) : [];
-  if (estado.vista === "mes") pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid, ausentes });
+  // Lo que el admin ha publicado del día seleccionado lo ven todos.
+  seguirPublicado(estado.vista === "mes" ? estado.sel : null);
+  const cuadrante = estado.vista === "mes" ? bloqueCuadrante(estado.pub, estado.sel, hoy, uid, soyAdmin()) : "";
+  if (estado.vista === "mes") pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid, ausentes, cuadrante });
   else pintarLista({ laborables, hoy, quienes, pedidos, uid });
 
   $("rec-anio").textContent = y;
@@ -497,7 +502,7 @@ function pintarRecuento(cuentas, gente, uid) {
 }
 
 // Calendario del mes: cada día de trabajo se oscurece cuanta más gente lo pide.
-function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid, ausentes = [] }) {
+function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid, ausentes = [], cuadrante = "" }) {
   const primero = (new Date(y, m, 1).getDay() + 6) % 7; // lunes primero
   let celdas = "";
   for (let i = 0; i < primero; i++) celdas += `<div class="cel vacia"></div>`;
@@ -519,9 +524,42 @@ function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid, 
   if (!d) { $("detalle").innerHTML = `<p class="nota">Toca un día para ver quién lo ha pedido.</p>`; return; }
   const q = quienes(d);
   $("detalle").innerHTML = `<h4>${esc(fmtLargo(d))}<small>${q.length} ${q.length === 1 ? "persona" : "personas"}</small></h4>
-    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)} ${siglas(x.tipo)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>${
+    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)} ${siglas(x.tipo)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>${cuadrante}${
     ausentes.length ? `<p class="nota det-ausentes">Marcados como «hoy no viene» en el cuadrante (${ausentes.length}):</p>
     <div class="chips">${ausentes.map((n) => `<span class="chip fuera">× ${esc(n)}</span>`).join("")}</div>` : ""}`;
+}
+
+// Escucha el cuadrante publicado de un día (lo pueden leer todos los del turno).
+function seguirPublicado(iso) {
+  if (estado.pub.iso === iso) return;
+  estado.pub.dejar?.();
+  Object.assign(estado.pub, { iso, doc: null, listo: false, dejar: null });
+  if (!iso || !estado.tid) return;
+  estado.pub.dejar = onSnapshot(doc(db, "turnos", estado.tid, "publicados", iso), (snap) => {
+    if (estado.pub.iso !== iso) return;
+    estado.pub.doc = snap.exists() ? snap.data() : null;
+    estado.pub.listo = true;
+    pintar();
+  }, () => { if (estado.pub.iso === iso) { estado.pub.listo = true; pintar(); } });
+}
+
+// El cuadrante y los equipos publicados de un día, o «Aún no hay cuadrante» si es hoy o futuro y no se ha publicado.
+function bloqueCuadrante(pub, iso, hoy, uid, admin) {
+  if (!iso || pub.iso !== iso || !pub.listo) return "";
+  const abrir = admin ? `<button class="enlace2" type="button" data-abrir-cuad="${iso}">abrir ›</button>` : "";
+  const d = pub.doc;
+  if (!d) return iso >= hoy ? `<div class="bloque-cuad"><div class="bloque-cab"><b>Cuadrante</b>${abrir}</div><p class="nota">Aún no hay cuadrante.</p></div>` : "";
+  const equipos = (d.equipos ?? []).map((e) => e.gente ?? []);
+  const puesto = PUESTOS.find(([k]) => d.puestos?.[k]?.id === uid);
+  const equipo = equipos.findIndex((g) => g.some((p) => p.id === uid));
+  const yo = puesto ? `Tienes el puesto ${puesto[1]}.` : equipo >= 0 ? `Estás en el Equipo ${equipo + 1}: empiezas en ${TAREA_TEXTO[tareaDe(0, equipo, 0)].nombre}.` : "";
+  const filas = PUESTOS.filter(([k]) => d.puestos?.[k] || k === "crc" || k === "oav")
+    .map(([k, etiqueta]) => `<span>${etiqueta}</span><b${d.puestos?.[k]?.id === uid ? ' class="yo"' : ""}>${d.puestos?.[k] ? esc(d.puestos[k].nombre) : '<i class="vacio">—</i>'}</b>`).join("");
+  return `<div class="bloque-cuad"><div class="bloque-cab"><b>Cuadrante</b>${TURNOS[d.turno] ? ` · ${TURNOS[d.turno].nombre} ${horarioTurno(d.turno)}` : ""}${abrir}</div>
+    ${yo ? `<p class="mi-puesto">${esc(yo)}</p>` : ""}
+    <div class="puestos-det">${filas}</div>
+    ${equipos.map((g, e) => `<div class="mini" style="--c:#${COLOR_EQUIPO[e]}"><div class="mini-cab"><b>Equipo ${e + 1}</b><small>empieza en ${TAREA_TEXTO[tareaDe(0, e, 0)].nombre} · ${g.length}</small></div>
+      <div class="mini-gente">${g.map((p) => (p.id === uid ? `<b class="yo">${esc(p.nombre)}</b>` : esc(p.nombre))).join(" · ") || "<em>Nadie</em>"}</div></div>`).join("")}</div>`;
 }
 
 // Escucha los «hoy no viene» del cuadrante de un día (solo admins pueden leerlos).
@@ -596,6 +634,8 @@ $("cuenta").addEventListener("click", async (ev) => {
   const btnSel = ev.target.closest("button[data-sel]");
   const btnDia = ev.target.closest("button[data-dia]");
   const btnTanda = ev.target.closest("button[data-tanda]");
+  const btnAbrir = ev.target.closest("button[data-abrir-cuad]");
+  if (btnAbrir) { cuad.iso = btnAbrir.dataset.abrirCuad; return abrirCuadrante(); }
   try {
     // Sin herramienta solo se mira. Con un tipo, el día se pinta (o se quita si ya era de ese tipo); con «borrar», se quita.
     if (btnSel || btnDia) {
@@ -743,7 +783,7 @@ $("btn-enlace-nuevo").onclick = async () => {
 /* ---------- cuadrante del día (solo admins) ---------- */
 
 const DOCX_URL = "https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js";
-const cuad = { iso: hoyISO(), doc: {}, existe: false, docListo: false, base: null, baseIso: null, baseListo: false, dejar: null };
+const cuad = { iso: hoyISO(), doc: {}, existe: false, docListo: false, base: null, baseIso: null, baseListo: false, pub: null, pubListo: false, dejar: null };
 
 const sumarDias = (iso, n) => { const d = aFecha(iso); d.setDate(d.getDate() + n); return aISO(d); };
 
@@ -768,15 +808,22 @@ function indiceTrabajo(iso) {
 
 function escucharCuadrante() {
   cuad.dejar?.();
-  Object.assign(cuad, { doc: {}, existe: false, docListo: false, base: null, baseIso: null, baseListo: false });
+  Object.assign(cuad, { doc: {}, existe: false, docListo: false, base: null, baseIso: null, baseListo: false, pub: null, pubListo: false });
   const iso = cuad.iso;
-  cuad.dejar = onSnapshot(doc(db, "turnos", estado.tid, "cuadrantes", iso), (snap) => {
+  const dejarDoc = onSnapshot(doc(db, "turnos", estado.tid, "cuadrantes", iso), (snap) => {
     if (cuad.iso !== iso) return;
     cuad.doc = snap.exists() ? snap.data() : {};
     cuad.existe = snap.exists();
     cuad.docListo = true;
     pintarCuadrante();
   }, (e) => console.error(e));
+  const dejarPub = onSnapshot(doc(db, "turnos", estado.tid, "publicados", iso), (snap) => {
+    if (cuad.iso !== iso) return;
+    cuad.pub = snap.exists() ? snap.data() : null;
+    cuad.pubListo = true;
+    pintarCuadrante();
+  }, (e) => console.error(e));
+  cuad.dejar = () => { dejarDoc(); dejarPub(); };
   cargarBaseCuadrante(iso);
 }
 function dejarCuadrante() { cuad.dejar?.(); cuad.dejar = null; }
@@ -859,6 +906,7 @@ function pintarCuadrante() {
     $("cuad-ausentes-sec").hidden = !c.noVienen.length;
     $("cuad-ausentes").innerHTML = c.noVienen.map((p) => `<span class="chipx ausente"><span class="chip">${esc(p.nombre)}</span><button class="x" type="button" data-vuelve="${esc(p.id)}" aria-label="${esc(p.nombre)}: vuelve" title="Devolver a «Sin asignar»">↩</button></span>`).join("");
     $("cuad-ausentes-n").textContent = c.noVienen.length;
+    pintarPublicar(c);
   }
   // Ajustes (solo si no se está editando alguno ahora mismo)
   if (!$("cuad-patron").contains(document.activeElement)) {
@@ -959,6 +1007,59 @@ $("btn-cuad-guardar").onclick = async () => {
   try {
     await updateDoc(doc(db, "turnos", estado.tid), { cuadrante: { patron } });
     aviso("Ajustes guardados");
+  } catch (e) { errorDatos(e); }
+};
+
+/* ---- publicar ---- */
+
+// Lo que se publica (puestos y equipos) y lo que se ve ahora, para saber si hay cambios sin publicar.
+const firmaCuadrante = (puestos, equipos) => JSON.stringify([puestos, equipos.map((g) => [...g].sort())]);
+const firmaDeVista = (v) => firmaCuadrante(PUESTOS.map(([k]) => v.puestos[k] ?? null), v.equipos.map((eq) => eq.map((p) => p.id)));
+const firmaDePublicado = (d) => firmaCuadrante(PUESTOS.map(([k]) => d.puestos?.[k]?.id ?? null), (d.equipos ?? []).map((e) => (e.gente ?? []).map((p) => p.id)));
+
+function pintarPublicar(c) {
+  const pub = cuad.pub;
+  const boton = $("btn-cuad-publicar");
+  $("btn-cuad-despublicar").hidden = !pub;
+  if (!cuad.pubListo) { $("cuad-pub-estado").textContent = "Comprobando…"; boton.disabled = true; return; }
+  if (!pub) {
+    $("cuad-pub-estado").textContent = "Sin publicar: en el calendario se ve «Aún no hay cuadrante».";
+    boton.textContent = "Publicar";
+    boton.disabled = false;
+    return;
+  }
+  const cuando = pub.publicado?.toDate?.().toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).replace(/\./g, "") ?? "";
+  const igual = firmaDePublicado(pub) === firmaDeVista(c.vista);
+  $("cuad-pub-estado").textContent = igual ? `Publicado${cuando ? ` el ${cuando}` : ""}. Todos lo ven en el calendario.`
+    : `Publicado${cuando ? ` el ${cuando}` : ""}, pero hay cambios sin publicar.`;
+  boton.textContent = igual ? "Publicado ✓" : "Publicar los cambios";
+  boton.disabled = igual;
+}
+
+$("btn-cuad-publicar").onclick = async () => {
+  const c = calcularCuadrante();
+  if (!c.vista || !c.info) return;
+  const sinAsignar = c.vista.bolsa;
+  if (sinAsignar.length && !confirm(`Hay ${sinAsignar.length} sin asignar (${sinAsignar.map((p) => p.nombre).join(", ")}) y no saldrán en lo publicado. ¿Publicar igualmente?`)) return;
+  try {
+    // Publicar también guarda el día, que es de donde parte el siguiente.
+    if (!cuad.existe || c.vista.origen === "antiguo") await setDoc(doc(db, "turnos", estado.tid, "cuadrantes", cuad.iso), docParaGuardar(c));
+    await setDoc(doc(db, "turnos", estado.tid, "publicados", cuad.iso), {
+      turno: c.info.turno,
+      puestos: Object.fromEntries(PUESTOS.map(([k]) => [k, c.vista.puestos[k] ? { id: c.vista.puestos[k], nombre: c.nombreDe(c.vista.puestos[k]) } : null])),
+      equipos: c.vista.equipos.map((eq) => ({ gente: eq.map((p) => ({ id: p.id, nombre: p.nombre })) })),
+      publicado: serverTimestamp(),
+      por: estado.user.uid,
+    });
+    aviso("Publicado en el calendario");
+  } catch (e) { errorDatos(e); }
+};
+
+$("btn-cuad-despublicar").onclick = async () => {
+  if (!confirm("¿Quitar lo publicado? En el calendario volverá a verse «Aún no hay cuadrante».")) return;
+  try {
+    await deleteDoc(doc(db, "turnos", estado.tid, "publicados", cuad.iso));
+    aviso("Publicación quitada");
   } catch (e) { errorDatos(e); }
 };
 
