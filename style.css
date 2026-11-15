@@ -528,3 +528,6 @@ dialog .nota { margin-bottom: 16px; }
 .chipx.ausente .chip { text-decoration: line-through; color: var(--tenue); background: transparent; cursor: default; }
 .chipx.ausente .x:hover { background: var(--tinta); border-color: var(--tinta); }
 .eqcard .chipx .chip.movido { border-color: var(--c); }
+
+.det-ausentes { margin: 12px 0 0; font-size: 13px; }
+.chip.fuera { color: var(--tenue); border-style: dashed; background: transparent; }
