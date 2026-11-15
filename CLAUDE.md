@@ -35,6 +35,13 @@ Todo en español: interfaz, nombres de variables y funciones, comentarios y mens
     - Documentos: «Cuadrante» (tabla con título amarillo y equipos rojo/azul/verde) y «Equipos» (listas). Word con la librería `docx@8.5.0` cargada de jsDelivr solo al pulsar (`DOCX_URL`); PDF por la impresión del navegador (`#hoja-imp` + `@media print`). Para probar los Word, convertirlos con `soffice --headless --convert-to pdf`.
   - Los tipos de día se eligen en una paleta (VAC, SS, NAV, AP, OTR y Borrar); sin nada elegido, tocar un día solo lo selecciona. El recuento lo ve cada uno solo de sí mismo; los admins ven el de todos.
 
+## Herramienta de datos (GitHub Actions)
+
+- Desde aquí **no hay acceso a Firebase**, así que para leer o apuntar datos de producción hay `.github/workflows/bd-admin.yml` + `scripts/bd/bd.mjs`: se lanza **solo a mano** (workflow_dispatch, solo desde `main`) y usa el secreto `FIREBASE_SERVICE_ACCOUNT` (JSON de una cuenta de servicio con rol «Usuario de Cloud Datastore»). Se lanza y se leen los registros con las herramientas de GitHub (`actions_run_trigger`, `get_job_logs`).
+- El repositorio es público y sus registros también, así que **nada con datos de personas sale en claro**: `bd.mjs` cifra con `scripts/bd/clave-publica.pem` (RSA-OAEP + AES-256-GCM) entre las marcas `#### INICIO X` / `#### FIN X`. La clave privada solo está en el scratchpad de la sesión que la generó; sin ella no se puede leer (se genera otra pareja y se cambia el `.pem`).
+- `exportar` (solo lectura) saca turnos, miembros y días. `aplicar` (con `confirmar=SI` y un plan `[{tid, uid, dia, tipo}]`) comprueba todo antes, saca una copia cifrada de los días, y solo **crea** los que no existían (`create()`, nunca pisa ni borra).
+- Pedir siempre confirmación al usuario antes de `aplicar`. Al terminar, que el usuario borre el secreto en GitHub y la clave en Google Cloud.
+
 ## Funcionamiento
 
 - Todos tienen cuenta. Una cuenta puede estar en varias cundas.
