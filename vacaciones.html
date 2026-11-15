@@ -161,9 +161,15 @@
     <div class="puesto"><label for="cuad-crc">CRC</label><select id="cuad-crc" data-puesto="crc"></select></div>
     <div class="puesto"><label for="cuad-oav">OAV</label><select id="cuad-oav" data-puesto="oav"></select></div>
     <div class="puesto"><label for="cuad-delfin">Delfín móvil</label><select id="cuad-delfin" data-puesto="delfin"></select></div>
-    <button id="btn-cuad-repetir" class="enlace" type="button">Repetir los puestos de días anteriores</button>
+    <div class="puesto"><label for="cuad-delfin3">Delfín 3</label><select id="cuad-delfin3" data-puesto="delfin3"></select></div>
+    <p id="cuad-origen" class="nota"></p>
 
-    <h3 class="sec">Equipos <small>Reparto automático. Toca a alguien para moverlo.</small></h3>
+    <div id="cuad-bolsa-sec" hidden>
+      <h3 class="sec">Sin asignar (<span id="cuad-bolsa-n">0</span>) <small>No salen en los documentos hasta que los asignes. Toca a alguien.</small></h3>
+      <div id="cuad-bolsa" class="chips bolsa"></div>
+    </div>
+
+    <h3 class="sec">Equipos <small>Toca a alguien para moverlo.</small></h3>
     <div id="cuad-equipos"></div>
 
     <h3 class="sec">Descargar</h3>

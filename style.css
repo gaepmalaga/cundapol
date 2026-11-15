@@ -510,3 +510,9 @@ dialog .nota { margin-bottom: 16px; }
   .doc, .doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   @page { size: A4; margin: 18mm 18mm; }
 }
+
+.eqcard .falta { float: right; font: 700 12px var(--sans); color: #fff; background: var(--c); border-radius: 99px; padding: 2px 9px; }
+.bolsa { margin: 0 0 4px; }
+.bolsa .chip, .chip.nuevo { background: color-mix(in srgb, #b8941f 20%, var(--papel)); border-color: #b8941f; cursor: pointer; font-family: var(--sans); }
+.mover-botones .boton-linea small { color: var(--tenue); font-weight: 400; }
+#cuad-origen { margin: 8px 0 0; font-size: 13px; }
