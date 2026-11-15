@@ -452,3 +452,61 @@ dialog .nota { margin-bottom: 16px; }
 /* Entrada con usuario */
 .nota-usuario { margin: -4px 0 14px; font-size: 13px; line-height: 1.35; }
 #btn-olvido { margin-top: 8px; }
+
+/* Cuadrante del día */
+.cuad-fecha {
+  flex: 1; min-width: 0; text-align: center; font: 700 20px var(--serif); color: var(--tinta);
+  background: transparent; border: 0; border-bottom: 2px solid var(--regla); padding: 6px 4px;
+}
+.turnoet { background: color-mix(in srgb, #b8941f 22%, var(--papel)); border-left: 5px solid #b8941f; border-radius: 10px; padding: 9px 12px; font: 500 15px var(--sans); margin: 0 0 4px; }
+.turnoet b { font-weight: 800; }
+.turnoet small { display: block; color: var(--tenue); font-size: 12.5px; margin-top: 2px; }
+.sec { font: 700 17px var(--serif); margin: 18px 0 8px; }
+.sec small { font: 400 12px var(--sans); color: var(--tenue); margin-left: 4px; }
+.puesto { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--regla); font: 600 15px var(--sans); }
+.puesto select, #cuad-rotacion, .patron select {
+  font: 500 15px var(--sans); padding: 8px 10px; min-width: 150px; color: var(--tinta);
+  background: var(--papel); border: 1.5px solid var(--tinta); border-radius: 8px;
+}
+#btn-cuad-repetir { margin-top: 10px; }
+.eqcard { border: 1.5px solid var(--regla); border-left: 6px solid var(--c); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; background: var(--papel-2); }
+.eqcard b { color: var(--c); font: 800 15px var(--sans); }
+.eqcard small { margin-left: 8px; color: var(--tenue); font: 500 12px var(--sans); }
+.eqcard .chips { margin: 6px 0 0; }
+.eqcard .nota { margin: 0; }
+.eqcard .chip { background: var(--papel); color: var(--tinta); cursor: pointer; font-family: var(--sans); }
+.eqcard .chip.movido { border-color: var(--c); font-weight: 700; }
+.descargas { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; font: 500 15px var(--sans); }
+.boton-descarga { padding: 10px 18px; border: 2px solid var(--tinta); border-radius: 8px; background: var(--tinta); color: var(--papel); font: 600 15px var(--sans); cursor: pointer; }
+.boton-descarga[data-fmt="pdf"] { background: transparent; color: var(--tinta); }
+.boton-descarga:disabled { opacity: .5; }
+.ajustes-cuad { margin: 22px 0 8px; border-top: 1px solid var(--regla); padding-top: 12px; }
+.ajustes-cuad summary { cursor: pointer; font: 600 15px var(--sans); }
+.patron { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 8px 0 12px; }
+.patron label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font: 500 14px var(--sans); }
+.patron select { min-width: 0; flex: 1; }
+.mover-botones { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+
+/* Los documentos del cuadrante: vista de impresión (PDF) */
+#hoja-imp { display: none; }
+.doc { color: #000; background: #fff; }
+.doc-cuadrante { font-family: "Liberation Serif", "Times New Roman", Times, serif; }
+.doc-cuadrante h1 { text-align: center; margin: 0 0 22px; font-weight: 700; }
+.doc-cuadrante h1 span { background: #ffff00; font-size: 28px; padding: 0 8px; }
+.doc-cuadrante table { border-collapse: collapse; width: calc(100% - 2px); margin: 0 1px; table-layout: fixed; font-size: 13pt; }
+.doc-cuadrante th, .doc-cuadrante td { border: 1px solid #808080; text-align: center; vertical-align: middle; padding: 8px 6px; height: 28mm; line-height: 1.25; overflow-wrap: break-word; }
+.doc-cuadrante tr:first-child th { height: 10mm; font-size: 13pt; }
+.doc-cuadrante th:first-child { width: 18%; font-size: 15pt; }
+.doc-cuadrante .pie { margin: 40px 0 0 36px; font-size: 16pt; line-height: 1.3; }
+.doc-cuadrante .pq { font-size: 12pt; }
+.doc-equipos { font-family: Arial, "Liberation Sans", Helvetica, sans-serif; font-size: 12pt; }
+.doc-equipos .eq { margin: 18px 0 8px; }
+.doc-equipos .eq:first-child { margin-top: 0; }
+.doc-equipos .nm { margin: 0 0 0 6px; line-height: 1.25; }
+@media print {
+  body.imprimiendo > :not(#hoja-imp) { display: none !important; }
+  body.imprimiendo #hoja-imp { display: block; }
+  body.imprimiendo { background: #fff; }
+  .doc, .doc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { size: A4; margin: 18mm 18mm; }
+}
