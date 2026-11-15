@@ -51,6 +51,7 @@ const estado = {
   user: null, perfil: { nombre: null },
   turnos: [], turnosListos: false,
   tid: null, turno: null, miembros: [], dias: [], mes: null, sel: null,
+  aus: { iso: null, ids: [], dejar: null }, // los marcados «hoy no viene» en el cuadrante del día seleccionado (solo admins)
   vista: "mes", herramienta: null, orden: "az", cerosAbiertos: false,
   modoAlta: false, autoAbrir: false, saliendo: false,
 };
@@ -344,6 +345,7 @@ function dejarTurno() {
   for (const f of dejarDeEscucharTurno) f();
   dejarDeEscucharTurno = [];
   dejarCuadrante();
+  seguirAusentes(null);
 }
 
 function abrirTurno(tid) {
@@ -448,7 +450,11 @@ function pintar() {
 
   if (!laborables.includes(estado.sel)) estado.sel = laborables.includes(hoy) ? hoy : null;
 
-  if (estado.vista === "mes") pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid });
+  // Los admins ven en el detalle del día a los que el cuadrante da por «hoy no viene».
+  seguirAusentes(soyAdmin() && estado.vista === "mes" ? estado.sel : null);
+  const ausentes = estado.aus.iso && estado.aus.iso === estado.sel
+    ? estado.aus.ids.filter((u) => gente.has(u)).map((u) => gente.get(u)).sort((a, b) => a.localeCompare(b, "es")) : [];
+  if (estado.vista === "mes") pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid, ausentes });
   else pintarLista({ laborables, hoy, quienes, pedidos, uid });
 
   $("rec-anio").textContent = y;
@@ -491,7 +497,7 @@ function pintarRecuento(cuentas, gente, uid) {
 }
 
 // Calendario del mes: cada día de trabajo se oscurece cuanta más gente lo pide.
-function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid }) {
+function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid, ausentes = [] }) {
   const primero = (new Date(y, m, 1).getDay() + 6) % 7; // lunes primero
   let celdas = "";
   for (let i = 0; i < primero; i++) celdas += `<div class="cel vacia"></div>`;
@@ -513,7 +519,23 @@ function pintarMes({ y, m, ultimo, hoy, iso, laborables, quienes, pedidos, uid }
   if (!d) { $("detalle").innerHTML = `<p class="nota">Toca un día para ver quién lo ha pedido.</p>`; return; }
   const q = quienes(d);
   $("detalle").innerHTML = `<h4>${esc(fmtLargo(d))}<small>${q.length} ${q.length === 1 ? "persona" : "personas"}</small></h4>
-    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)} ${siglas(x.tipo)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>`;
+    <div class="chips">${q.map((x) => `<span class="chip${x.u === uid ? " yo" : ""}">${esc(x.nombre)} ${siglas(x.tipo)}</span>`).join("") || `<span class="nota">Nadie todavía.</span>`}</div>${
+    ausentes.length ? `<p class="nota det-ausentes">Marcados como «hoy no viene» en el cuadrante (${ausentes.length}):</p>
+    <div class="chips">${ausentes.map((n) => `<span class="chip fuera">× ${esc(n)}</span>`).join("")}</div>` : ""}`;
+}
+
+// Escucha los «hoy no viene» del cuadrante de un día (solo admins pueden leerlos).
+function seguirAusentes(iso) {
+  if (estado.aus.iso === iso) return;
+  estado.aus.dejar?.();
+  Object.assign(estado.aus, { iso, ids: [], dejar: null });
+  if (!iso || !estado.tid) return;
+  estado.aus.dejar = onSnapshot(doc(db, "turnos", estado.tid, "cuadrantes", iso), (snap) => {
+    if (estado.aus.iso !== iso) return;
+    const ids = snap.exists() ? snap.data().ausentes : null;
+    estado.aus.ids = Array.isArray(ids) ? ids : [];
+    pintar();
+  }, () => {});
 }
 
 // Lista del mes: un día por línea, agrupados por tanda de trabajo.
@@ -732,8 +754,16 @@ function diaDeCuadrante(iso) {
   if (pos >= TRABAJO) return null;
   const ajustes = estado.turno?.cuadrante ?? {};
   const patron = patronValido(ajustes.patron) ? ajustes.patron : PATRON_POR_DEFECTO;
-  const rotacion = [0, 1, 2].includes(ajustes.rotacion) ? ajustes.rotacion : 0;
-  return { turno: patron[pos], pos, base: rotacion + pos };
+  // Las tareas de cada equipo son fijas (base 0): lo que rota cada día es la gente.
+  return { turno: patron[pos], pos, base: 0 };
+}
+
+// Nº de día de trabajo contando los 6 de cada tanda seguidos: la diferencia entre dos días dice
+// cuántos equipos ha rotado la gente entre uno y otro.
+function indiceTrabajo(iso) {
+  const n = numDia(iso);
+  const t = Math.floor(n / CICLO);
+  return t * TRABAJO + Math.min(n - t * CICLO, TRABAJO - 1);
 }
 
 function escucharCuadrante() {
@@ -780,10 +810,11 @@ function calcularCuadrante() {
   const disponibles = gente.filter((p) => !libres.has(p.id) && !ausentes.has(p.id)).sort(alfa);
   const libran = gente.filter((p) => libres.has(p.id)).sort(alfa);
   const noVienen = gente.filter((p) => !libres.has(p.id) && ausentes.has(p.id)).sort(alfa);
-  const vista = info ? resolverDia(disponibles, cuad.doc, cuad.base) : null;
+  const pasos = cuad.baseIso ? ((((indiceTrabajo(cuad.iso) - indiceTrabajo(cuad.baseIso)) % 3) + 3) % 3) : 0;
+  const vista = info ? resolverDia(disponibles, cuad.doc, cuad.base, pasos) : null;
   const nombreDe = (id) => gente.find((p) => p.id === id)?.nombre ?? null;
   return {
-    info, disponibles, libran, noVienen, vista, nombreDe,
+    info, disponibles, libran, noVienen, vista, pasos, nombreDe,
     datos: info && {
       turno: info.turno, iso: cuad.iso, base: info.base, equipos: vista.equipos.map((eq) => eq.map((p) => p.nombre)),
       crc: nombreDe(vista.puestos.crc), oav: nombreDe(vista.puestos.oav), delfin: nombreDe(vista.puestos.delfin), delfin3: nombreDe(vista.puestos.delfin3), delfin20: nombreDe(vista.puestos.delfin20),
@@ -812,7 +843,7 @@ function pintarCuadrante() {
     banda.innerHTML = `<b>${TURNOS[c.info.turno].nombre}</b> · ${horarioTurno(c.info.turno)}<small>Trabajan ${c.disponibles.length}${
       c.libran.length ? ` · libran ${c.libran.length} (${c.libran.map((p) => esc(p.nombre)).join(", ")})` : ""}</small>`;
     $("cuad-origen").textContent = v.origen === "guardado" ? "Guardado."
-      : v.origen === "anterior" ? `Partimos del cuadrante del ${fmtRango(cuad.baseIso)}: se repiten puestos y equipos, sin los que hoy no están. Se guarda al cambiar algo o al descargar.`
+      : v.origen === "anterior" ? `Partimos del cuadrante del ${fmtRango(cuad.baseIso)}: los puestos se repiten${c.pasos ? " y cada persona pasa al equipo siguiente (1 → 2 → 3 → 1)" : ", igual que los equipos"}, sin los que hoy no están. Se guarda al cambiar algo o al descargar.`
       : "Sin cuadrante anterior: reparto automático. Se guarda al cambiar algo o al descargar.";
     for (const [k] of PUESTOS) {
       const otros = new Set(PUESTOS.map(([x]) => x).filter((x) => x !== k).map((x) => v.puestos[x]).filter(Boolean));
@@ -835,7 +866,6 @@ function pintarCuadrante() {
     const patron = patronValido(ajustes.patron) ? ajustes.patron : PATRON_POR_DEFECTO;
     $("cuad-patron").innerHTML = patron.map((t, i) => `<label>Día ${i + 1}<select data-patron="${i}">${
       Object.entries(TURNOS).map(([k, v]) => `<option value="${k}"${k === t ? " selected" : ""}>${v.nombre[0] + v.nombre.slice(1).toLowerCase()}</option>`).join("")}</select></label>`).join("");
-    $("cuad-rotacion").value = String([0, 1, 2].includes(ajustes.rotacion) ? ajustes.rotacion : 0);
   }
 }
 
@@ -927,7 +957,7 @@ $("btn-cuad-guardar").onclick = async () => {
   const patron = [...document.querySelectorAll("[data-patron]")].map((s) => s.value);
   if (!patronValido(patron)) return aviso("Ese patrón no vale.");
   try {
-    await updateDoc(doc(db, "turnos", estado.tid), { cuadrante: { patron, rotacion: Number($("cuad-rotacion").value) } });
+    await updateDoc(doc(db, "turnos", estado.tid), { cuadrante: { patron } });
     aviso("Ajustes guardados");
   } catch (e) { errorDatos(e); }
 };

@@ -88,13 +88,19 @@ const CLAVES_PUESTO = PUESTOS.map(([k]) => k);
 
 const conEquipos = (d) => !!d && typeof d.equipos === "object" && d.equipos !== null;
 
-// Lo que se ve de un día. `doc` es lo guardado ese día (o {}), `base` el último cuadrante guardado antes.
+// Las tareas de cada equipo no cambian nunca: el 1 empieza en Entrada, el 2 en Salida y el 3 en Pasajeros.
+// Lo que rota es la gente: cada día todos pasan al equipo siguiente (1 → 2 → 3 → 1).
+export const rotarEquipo = (n, pasos) => ((((n - 1 + pasos) % 3) + 3) % 3) + 1;
+
+// Lo que se ve de un día. `doc` es lo guardado ese día (o {}), `base` el último cuadrante guardado antes
+// y `pasos` los días de trabajo que han pasado desde entonces (cada uno rota la gente un equipo).
 //  - Si el día está guardado, se usa tal cual.
-//  - Si no, se parte del cuadrante anterior: se quitan los que hoy no están disponibles y los que no
-//    estaban en el anterior (volvieron, o entraron) quedan en la bolsa para asignarlos a mano.
+//  - Si no, se parte del cuadrante anterior: los puestos se repiten y cada persona pasa al equipo
+//    siguiente; se quitan los que hoy no están disponibles y los que no estaban en el anterior (volvieron,
+//    o entraron) quedan en la bolsa para asignarlos a mano.
 //  - Sin nada anterior (o con un cuadrante de la primera versión, sin equipos), se reparte solo.
 // Devuelve { origen, puestos, equipos: [[persona]], bolsa: [persona], faltan: [n, n, n] }.
-export function resolverDia(disponibles, doc = {}, base = null) {
+export function resolverDia(disponibles, doc = {}, base = null, pasos = 0) {
   const porId = new Map(disponibles.map((p) => [p.id, p]));
   let origen;
   let fuente = null;
@@ -115,7 +121,9 @@ export function resolverDia(disponibles, doc = {}, base = null) {
   if (fuente) {
     equipos = [[], [], []];
     for (const [id, n] of Object.entries(fuente.equipos)) {
-      if (porId.has(id) && !ocupados.has(id) && [1, 2, 3].includes(n)) equipos[n - 1].push(porId.get(id));
+      if (!porId.has(id) || ocupados.has(id) || ![1, 2, 3].includes(n)) continue;
+      const destino = origen === "anterior" ? rotarEquipo(n, pasos) : n; // solo se rota al heredar
+      equipos[destino - 1].push(porId.get(id));
     }
     for (const eq of equipos) eq.sort(porNombre);
   } else {
@@ -124,9 +132,9 @@ export function resolverDia(disponibles, doc = {}, base = null) {
 
   const asignados = new Set([...ocupados, ...equipos.flat().map((p) => p.id)]);
   const bolsa = fuente ? disponibles.filter((p) => !asignados.has(p.id)).sort(porNombre) : [];
-  // Huecos: cuántos faltan en cada equipo respecto al cuadrante anterior.
+  // Huecos: cuántos faltan en cada equipo respecto al cuadrante anterior (ya rotado).
   const faltan = [0, 1, 2].map((e) => (conEquipos(base)
-    ? Math.max(0, Object.values(base.equipos).filter((n) => n === e + 1).length - equipos[e].length) : 0));
+    ? Math.max(0, Object.values(base.equipos).filter((n) => rotarEquipo(n, pasos) === e + 1).length - equipos[e].length) : 0));
   return { origen, puestos, equipos, bolsa, faltan };
 }
 
