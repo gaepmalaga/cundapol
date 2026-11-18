@@ -2,6 +2,9 @@
   "name": "bd-vacapol",
   "private": true,
   "type": "module",
-  "description": "Herramienta de administración de la base de datos (solo desde GitHub Actions, a mano).",
-  "dependencies": { "firebase-admin": "12.7.0" }
+  "description": "Herramienta de administraci\u00f3n de la base de datos (solo desde GitHub Actions, a mano).",
+  "dependencies": {
+    "firebase-admin": "12.7.0",
+    "firebase": "10.14.1"
+  }
 }
