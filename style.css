@@ -550,3 +550,5 @@ dialog .nota { margin-bottom: 16px; }
 .publicar { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .publicar .boton-solido { width: 100%; }
 .publicar .boton-solido:disabled { opacity: .55; }
+
+.cuenta-sin { margin-top: -6px; font-size: 13px; word-break: break-word; }
