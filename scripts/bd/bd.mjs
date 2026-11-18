@@ -7,6 +7,8 @@
 // solo quien tiene la clave privada puede leerlo.
 //
 //   node bd.mjs exportar            lee turnos, miembros y días. Solo lectura.
+//   node bd.mjs perfiles            lee los perfiles (uid → nombre) y las cundas (quién está dentro, sin
+//                                   el código del enlace). Solo lectura.
 //   node bd.mjs aplicar SI '<plan>' apunta días: plan = [{ "tid", "uid", "dia", "tipo" }].
 //                                   Antes saca una copia de los días de esos turnos. Solo crea
 //                                   días que no existían; nunca pisa ni borra nada.
@@ -65,6 +67,14 @@ if (accion === "exportar") {
   const turnos = await leerTurnos();
   console.log(`Turnos leídos: ${turnos.length}. Días en total: ${turnos.reduce((n, t) => n + t.dias.length, 0)}.`);
   imprimirCifrado("EXPORTACION", turnos);
+} else if (accion === "perfiles") {
+  const perfiles = (await db.collection("perfiles").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+  const cundas = (await db.collection("cundas").get()).docs.map((d) => {
+    const c = d.data();
+    return { id: d.id, nombre: c.nombre, admin: c.admin, uids: c.uids ?? [] }; // sin el código del enlace
+  });
+  console.log(`Perfiles leídos: ${perfiles.length}. Cundas leídas: ${cundas.length}.`);
+  imprimirCifrado("PERFILES", { perfiles, cundas });
 } else if (accion === "aplicar") {
   if (confirmar !== "SI") { console.log("No se escribe nada: falta confirmar con SI."); process.exit(1); }
   let plan;
@@ -100,6 +110,6 @@ if (accion === "exportar") {
   }
   console.log(`Creados: ${creados} · ya estaban: ${yaEstaban}.`);
 } else {
-  console.log("Acción desconocida: usa «exportar» o «aplicar».");
+  console.log("Acción desconocida: usa «exportar», «perfiles» o «aplicar».");
   process.exit(1);
 }

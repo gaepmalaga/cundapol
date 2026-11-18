@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       accion:
-        description: "exportar = solo lectura; aplicar = apunta los días del plan"
+        description: "exportar / perfiles = solo lectura; aplicar = apunta los días del plan"
         type: choice
-        options: [exportar, aplicar]
+        options: [exportar, perfiles, aplicar]
         default: exportar
       confirmar:
         description: "Para aplicar, escribe SI"
