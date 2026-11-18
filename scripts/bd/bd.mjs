@@ -9,12 +9,18 @@
 //   node bd.mjs exportar            lee turnos, miembros y días. Solo lectura.
 //   node bd.mjs perfiles            lee los perfiles (uid → nombre) y las cundas (quién está dentro, sin
 //                                   el código del enlace). Solo lectura.
+//   node bd.mjs probar <tid> <uid,uid…>
+//                                   hace lo mismo que la app para cada uid (inicia sesión con un token
+//                                   hecho con la clave, como ese usuario): la consulta de «tus turnos», la
+//                                   lectura del turno y de sus miembros y días. Solo lectura. Sirve para ver
+//                                   si un usuario ve su turno con las reglas publicadas.
 //   node bd.mjs aplicar SI '<plan>' apunta días: plan = [{ "tid", "uid", "dia", "tipo" }].
 //                                   Antes saca una copia de los días de esos turnos. Solo crea
 //                                   días que no existían; nunca pisa ni borra nada.
 
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getAuth as getAuthAdmin } from "firebase-admin/auth";
 import crypto from "node:crypto";
 import fs from "node:fs";
 
@@ -75,6 +81,35 @@ if (accion === "exportar") {
   });
   console.log(`Perfiles leídos: ${perfiles.length}. Cundas leídas: ${cundas.length}.`);
   imprimirCifrado("PERFILES", { perfiles, cundas });
+} else if (accion === "probar") {
+  const tid = confirmar;
+  const uids = planTexto.split(",").map((x) => x.trim()).filter(Boolean);
+  if (!tid || !uids.length) { console.log("Uso: probar <tid> <uid,uid…> (el tid va en «confirmar» y los uid en «plan»)."); process.exit(1); }
+  const { initializeApp: iniciarCliente } = await import("firebase/app");
+  const { getAuth, signInWithCustomToken, connectAuthEmulator } = await import("firebase/auth");
+  const F = await import("firebase/firestore");
+  const config = { apiKey: "AIzaSyBTC7Im2qfaZodfhH1Qr_Uey4CGEyVw0Yc", authDomain: "cundapol.firebaseapp.com", projectId: process.env.FIRESTORE_EMULATOR_HOST ? "demo-cunda" : "cundapol" };
+  const codigo = (e) => e?.code ?? e?.message ?? String(e);
+  for (const uid of uids) {
+    const etiqueta = `…${uid.slice(-6)}`;
+    const app = iniciarCliente(config, `prueba-${uid}`);
+    const auth = getAuth(app);
+    const db = F.getFirestore(app);
+    if (process.env.FIRESTORE_EMULATOR_HOST) {
+      connectAuthEmulator(auth, `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}`, { disableWarnings: true });
+      F.connectFirestoreEmulator(db, ...process.env.FIRESTORE_EMULATOR_HOST.split(":"));
+    }
+    try { await signInWithCustomToken(auth, await getAuthAdmin().createCustomToken(uid)); } catch (e) { console.log(`${etiqueta}: no se pudo iniciar sesión: ${codigo(e)}`); continue; }
+    const intenta = async (nombre, fn) => { try { console.log(`${etiqueta} · ${nombre}: ${await fn()}`); } catch (e) { console.log(`${etiqueta} · ${nombre}: ERROR ${codigo(e)}`); } };
+    await intenta("consulta «tus turnos» (uids array-contains uid)", async () => {
+      const s = await F.getDocs(F.query(F.collection(db, "turnos"), F.where("uids", "array-contains", uid)));
+      return `${s.size} resultado(s) ${s.docs.map((d) => d.id).join(",")} (de caché: ${s.metadata.fromCache})`;
+    });
+    await intenta(`leer turno ${tid}`, async () => { const d = await F.getDoc(F.doc(db, "turnos", tid)); return d.exists() ? `existe, ${(d.data().uids ?? []).length} uids, está dentro: ${(d.data().uids ?? []).includes(uid)}` : "no existe"; });
+    await intenta("leer miembros", async () => `${(await F.getDocs(F.collection(db, "turnos", tid, "miembros"))).size}`);
+    await intenta("leer días", async () => `${(await F.getDocs(F.collection(db, "turnos", tid, "dias"))).size}`);
+  }
+  process.exit(0);
 } else if (accion === "aplicar") {
   if (confirmar !== "SI") { console.log("No se escribe nada: falta confirmar con SI."); process.exit(1); }
   let plan;
@@ -110,6 +145,6 @@ if (accion === "exportar") {
   }
   console.log(`Creados: ${creados} · ya estaban: ${yaEstaban}.`);
 } else {
-  console.log("Acción desconocida: usa «exportar», «perfiles» o «aplicar».");
+  console.log("Acción desconocida: usa «exportar», «perfiles», «probar» o «aplicar».");
   process.exit(1);
 }

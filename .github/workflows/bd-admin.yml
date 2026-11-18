@@ -7,15 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       accion:
-        description: "exportar / perfiles = solo lectura; aplicar = apunta los días del plan"
+        description: "exportar / perfiles / probar = solo lectura; aplicar = apunta los días del plan"
         type: choice
-        options: [exportar, perfiles, aplicar]
+        options: [exportar, perfiles, probar, aplicar]
         default: exportar
       confirmar:
-        description: "Para aplicar, escribe SI"
+        description: "Para aplicar, escribe SI. Para probar, el id del turno"
         default: ""
       plan:
-        description: "Para aplicar: JSON [{tid, uid, dia, tipo}]"
+        description: "Para aplicar: JSON [{tid, uid, dia, tipo}]. Para probar: uids separados por comas"
         default: ""
 
 permissions:
