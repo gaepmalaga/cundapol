@@ -298,7 +298,16 @@ function pintarTurnos() {
     return abrirTurno(estado.turnos[0].id);
   }
   $("soy-turnos").textContent = estado.perfil.nombre ?? "";
-  $("sin-turnos").hidden = !estado.turnosListos || estado.turnos.length > 0;
+  const sinTurnos = estado.turnosListos && estado.turnos.length === 0;
+  $("sin-turnos").hidden = !sinTurnos;
+  // Si no sale ningún turno, se dice con qué cuenta se ha entrado: lo más habitual es haber entrado con otra.
+  const cuenta = $("cuenta-sin-turnos");
+  cuenta.hidden = !sinTurnos || !estado.user;
+  if (sinTurnos && estado.user) {
+    const correo = estado.user.email ?? "";
+    const quien = correo.endsWith(`@${DOMINIO_USUARIO}`) ? `usuario «${correo.split("@")[0]}»` : correo || "esta cuenta";
+    cuenta.textContent = `Has entrado como ${quien} (cuenta …${estado.user.uid.slice(-6)}). Si tu turno está en otra cuenta, pulsa «salir» y entra con esa.`;
+  }
   $("lista-turnos").innerHTML = estado.turnos
     .map((t) => `<li><button type="button" data-id="${esc(t.id)}">${esc(t.nombre)}${
       adminsDe(t).has(estado.user?.uid) ? `<span class="admin">admin</span>` : ""}</button></li>`)
